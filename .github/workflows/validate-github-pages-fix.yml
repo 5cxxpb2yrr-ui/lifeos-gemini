@@ -44,6 +44,9 @@ jobs:
       - name: Build workspace
         run: pnpm build
 
+      - name: Run automated tests
+        run: pnpm test
+
       - name: Verify Pages output
         run: |
           test -s apps/web/dist/index.html
