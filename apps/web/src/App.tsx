@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { filterEntries, readEntries, writeEntries, STORAGE_KEY } from './entry-utils.mjs';
 import { Activity, Archive, Check, Circle, Clock3, Plus, Search, Sparkles } from 'lucide-react';
 
 type EntryType = 'task' | 'question' | 'follow-up' | 'idea' | 'event';
@@ -10,7 +11,6 @@ type Entry = {
   completedAt: string | null;
 };
 
-const STORAGE_KEY = 'lifeos-mission-control.entries.v1';
 const entryTypes: { value: EntryType; label: string }[] = [
   { value: 'task', label: 'Task' },
   { value: 'question', label: 'Question' },
@@ -19,28 +19,12 @@ const entryTypes: { value: EntryType; label: string }[] = [
   { value: 'event', label: 'Event' },
 ];
 
-function readEntries(): Entry[] {
-  try {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (!stored) return [];
-    const parsed: unknown = JSON.parse(stored);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is Entry =>
-      Boolean(item && typeof item.id === 'string' && typeof item.title === 'string' &&
-      typeof item.createdAt === 'string' && typeof item.type === 'string' &&
-      (item.completedAt === null || typeof item.completedAt === 'string')),
-    );
-  } catch {
-    return [];
-  }
-}
-
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value));
 }
 
 export default function App() {
-  const [entries, setEntries] = useState<Entry[]>(readEntries);
+  const [entries, setEntries] = useState<Entry[]>(() => readEntries(window.localStorage));
   const [title, setTitle] = useState('');
   const [type, setType] = useState<EntryType>('task');
   const [query, setQuery] = useState('');
@@ -48,7 +32,7 @@ export default function App() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+      writeEntries(window.localStorage, entries, STORAGE_KEY);
     } catch {
       // The app remains usable for this session if browser storage is unavailable.
     }
@@ -56,11 +40,10 @@ export default function App() {
 
   const openEntries = useMemo(() => entries.filter((entry) => !entry.completedAt), [entries]);
   const completedEntries = useMemo(() => entries.filter((entry) => entry.completedAt), [entries]);
-  const visibleEntries = useMemo(() => {
-    const source = showCompleted ? completedEntries : openEntries;
-    const normalizedQuery = query.trim().toLocaleLowerCase();
-    return source.filter((entry) => !normalizedQuery || entry.title.toLocaleLowerCase().includes(normalizedQuery) || entry.type.includes(normalizedQuery));
-  }, [completedEntries, openEntries, query, showCompleted]);
+  const visibleEntries = useMemo(
+    () => filterEntries(entries, query, showCompleted),
+    [entries, query, showCompleted],
+  );
 
   function capture(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
