@@ -1,0 +1,51 @@
+name: Validate GitHub Pages build (no deployment)
+
+on:
+  push:
+    branches:
+      - fix/github-pages-vite-deploy-2026-10-23
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'services/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace
+        run: pnpm build
+
+      - name: Verify Pages output
+        run: |
+          test -s apps/web/dist/index.html
+          grep -q '/lifeos-gemini/assets/' apps/web/dist/index.html
+          echo "Built app found and asset paths include /lifeos-gemini/."
