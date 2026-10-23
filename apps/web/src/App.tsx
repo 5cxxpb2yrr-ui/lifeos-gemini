@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { filterEntries, readEntries, writeEntries, STORAGE_KEY } from './entry-utils.mjs';
 import { Activity, Archive, Check, Circle, Clock3, Plus, Search, Sparkles } from 'lucide-react';
+import type { Recommendation } from '@lifeos/domain';
+import { NextBestActionCard } from './components/NextBestActionCard';
 
 type EntryType = 'task' | 'question' | 'follow-up' | 'idea' | 'event';
 type Entry = {
@@ -9,6 +11,20 @@ type Entry = {
   type: EntryType;
   createdAt: string;
   completedAt: string | null;
+};
+
+const nba: Recommendation = {
+  id: 'rec-1',
+  entityId: 'property-1',
+  title: 'Contact Georgia Power',
+  category: 'execute_now',
+  recommendation: 'regarding service transfer.',
+  whyThisMatters: 'Your move date is in 6 days. No transfer request is currently open.',
+  expectedOutcome: 'Prevent utility interruption for your upcoming move and avoid late fees.',
+  impactScore: 92,
+  confidenceScore: 88,
+  urgencyScore: 90,
+  actions: ['Call Now', 'Start Online'],
 };
 
 const entryTypes: { value: EntryType; label: string }[] = [
@@ -78,6 +94,8 @@ export default function App() {
             <p className="text-sm font-semibold">{today}</p>
           </div>
         </header>
+
+        <NextBestActionCard recommendation={nba} onAction={(action) => { if (action === 'Call Now') window.location.href = 'tel:'; }} />
 
         <section className="mb-5 rounded-3xl border border-amber-400/30 bg-gradient-to-br from-amber-400/[0.12] via-slate-900 to-slate-950 p-5 shadow-[0_0_38px_rgba(245,158,11,0.08)] sm:p-6">
           <div className="mb-4 flex items-center gap-2">
