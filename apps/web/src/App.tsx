@@ -95,7 +95,7 @@ export default function App() {
           </div>
         </header>
 
-        <NextBestActionCard recommendation={nba} onAction={(action) => { if (action === 'Call Now') window.location.href = 'tel:'; }} />
+        <NextBestActionCard recommendation={nba} onAction={(action) => console.log(action)} />
 
         <section className="mb-5 rounded-3xl border border-amber-400/30 bg-gradient-to-br from-amber-400/[0.12] via-slate-900 to-slate-950 p-5 shadow-[0_0_38px_rgba(245,158,11,0.08)] sm:p-6">
           <div className="mb-4 flex items-center gap-2">
