@@ -1,0 +1,86 @@
+name: Isolated build and deployed-site validation
+
+on:
+  push:
+    branches:
+      - validation/isolated-build-2026-10-23
+
+permissions:
+  contents: read
+
+jobs:
+  build-validation:
+    name: Frozen install and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout validation branch
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+      - name: Report tool versions
+        run: |
+          node --version
+          pnpm --version
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build workspace
+        run: pnpm build
+
+  deployed-site-browser-check:
+    name: Read-only browser smoke test of deployed site
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install temporary Playwright browser tooling
+        run: |
+          mkdir -p /tmp/site-check
+          npm install --prefix /tmp/site-check playwright
+          /tmp/site-check/node_modules/.bin/playwright install --with-deps chromium
+      - name: Open deployed site in Chromium and capture diagnostics
+        env:
+          SITE_URL: https://5cxxpb2yrr-ui.github.io/lifeos-gemini/
+        run: |
+          cat > /tmp/site-check/check.mjs <<'EOF'
+          import { chromium } from '/tmp/site-check/node_modules/playwright/index.mjs';
+          const url = process.env.SITE_URL;
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+          const errors = [];
+          page.on('pageerror', error => errors.push(error.message));
+          page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+          try {
+            const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
+            console.log('URL:', page.url());
+            console.log('HTTP_STATUS:', response?.status() ?? 'no response');
+            console.log('TITLE:', await page.title());
+            console.log('BODY_TEXT:', (await page.locator('body').innerText().catch(() => '')).slice(0, 1500));
+            console.log('PAGE_ERRORS:', JSON.stringify(errors));
+            await page.screenshot({ path: '/tmp/site-check/deployed-site.png', fullPage: true });
+            if (!response || response.status() < 200 || response.status() >= 400) process.exitCode = 1;
+          } catch (error) {
+            console.error('BROWSER_CHECK_FAILED:', error.message);
+            process.exitCode = 1;
+          } finally {
+            await browser.close();
+          }
+          EOF
+          node /tmp/site-check/check.mjs
+      - name: Upload browser screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployed-site-browser-screenshot
+          path: /tmp/site-check/deployed-site.png
+          if-no-files-found: ignore
+          retention-days: 7
