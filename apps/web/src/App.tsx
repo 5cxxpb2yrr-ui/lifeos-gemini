@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
+import { filterOpenLoops, resolveOpenLoops } from '@lifeos/domain';
 import type { OpenLoopSourceRecord, OpenLoopTiming, Recommendation } from '@lifeos/domain';
-import { filterOpenLoops, resolveOpenLoops } from '@lifeos/domain/open-loops';
 import { lifeosTheme as t } from '@lifeos/shared';
 import { NextBestActionCard } from './components/NextBestActionCard';
 
