@@ -76,9 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Deployment is disabled unless an owner deliberately enables the repository variable.
-    if: >-
-      github.ref == 'refs/heads/feat/mission-control-integrated-preview' &&
-      vars.ENABLE_LIFEOS_GEMINI_PREVIEW_DEPLOY == 'true'
+    if: ${{ github.ref == 'refs/heads/feat/mission-control-integrated-preview' && vars.ENABLE_LIFEOS_GEMINI_PREVIEW_DEPLOY == 'true' }}
     environment:
       name: lifeos-gemini-preview
       url: https://pr-5-preview.lifeos-gemini-preview.pages.dev
