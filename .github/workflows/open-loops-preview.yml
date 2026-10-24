@@ -1,0 +1,100 @@
+name: Open Loops isolated preview
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'services/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - '.github/workflows/open-loops-preview.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lifeos-gemini-preview
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace
+        run: pnpm build
+
+      - name: Verify built site
+        run: |
+          test -s apps/web/dist/index.html
+          grep -q '/lifeos-gemini/assets/' apps/web/dist/index.html
+          echo "Preview build verified."
+
+      - name: Upload build artifact for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: lifeos-gemini-open-loops-preview
+          path: apps/web/dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy-isolated-preview:
+    if: github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: lifeos-preview
+      url: https://lifeos-gemini-preview.pages.dev
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace
+        run: pnpm build
+
+      - name: Publish to the separate preview project only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Configure CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets before running the manual preview deployment."
+            exit 1
+          fi
+          pnpm dlx wrangler@4 pages deploy apps/web/dist --project-name lifeos-gemini-preview --branch preview --commit-dirty=true
