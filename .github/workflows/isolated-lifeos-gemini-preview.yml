@@ -1,0 +1,99 @@
+name: Isolated LifeOS Gemini preview
+
+on:
+  push:
+    branches:
+      - feat/mission-control-integrated-preview
+    paths:
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'services/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - '.github/workflows/isolated-lifeos-gemini-preview.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lifeos-gemini-pr5-preview
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build and test preview artifact (no deployment)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/mission-control-integrated-preview
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      # This worktree-only change makes the build usable at the isolated Pages root.
+      # It is not committed back to the repository.
+      - name: Set relative asset base for preview build
+        run: sed -i "s|base: '/lifeos-gemini/'|base: './'|" apps/web/vite.config.ts
+
+      - name: Run automated tests
+        run: pnpm test
+
+      - name: Build workspace
+        run: pnpm build
+
+      - name: Verify static preview output
+        run: |
+          test -s apps/web/dist/index.html
+          grep -q './assets/' apps/web/dist/index.html
+          echo "Preview build output verified; no deployment performed."
+
+      - name: Upload preview artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lifeos-gemini-pr5-preview
+          path: apps/web/dist
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy-isolated-preview:
+    name: Deploy only to isolated Pages project
+    needs: build-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Deployment is disabled unless an owner deliberately enables the repository variable.
+    if: >-
+      github.ref == 'refs/heads/feat/mission-control-integrated-preview' &&
+      vars.ENABLE_LIFEOS_GEMINI_PREVIEW_DEPLOY == 'true'
+    environment:
+      name: lifeos-gemini-preview
+      url: https://pr-5-preview.lifeos-gemini-preview.pages.dev
+    permissions:
+      contents: read
+    steps:
+      - name: Download validated preview artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lifeos-gemini-pr5-preview
+          path: apps/web/dist
+
+      - name: Deploy to isolated Cloudflare Pages project
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy apps/web/dist --project-name=lifeos-gemini-preview --branch=pr-5-preview
