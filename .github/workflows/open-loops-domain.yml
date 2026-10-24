@@ -1,0 +1,31 @@
+name: Open Loops Domain Verification
+
+on:
+  pull_request:
+    paths:
+      - 'packages/domain/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/open-loops-domain.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/domain/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+
+jobs:
+  domain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @lifeos/domain test
+      - run: pnpm --filter @lifeos/domain build
