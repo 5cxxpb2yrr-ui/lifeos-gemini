@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { filterOpenLoops, resolveOpenLoops } from '@lifeos/domain';
 import type { OpenLoopSourceRecord, OpenLoopTiming } from '@lifeos/domain';
 
@@ -22,8 +22,8 @@ const types: Record<OpenLoopSourceRecord['type'], string> = { task: 'Task', ques
 
 export function OpenLoopsDashboard() {
   const [filter, setFilter] = useState<OpenLoopTiming | 'all'>('all');
-  const resolved = useMemo(() => resolveOpenLoops(samples, now), []);
-  const visible = useMemo(() => filterOpenLoops(resolved, { timing: filter }), [resolved, filter]);
+  const resolved = resolveOpenLoops(samples, new Date());
+  const visible = filterOpenLoops(resolved, { timing: filter });
   return <section className="mb-5 rounded-3xl border border-blue-400/25 bg-gradient-to-br from-slate-900 to-slate-950 p-5 shadow-[0_0_28px_rgba(37,99,235,0.08)] sm:p-6">
     <div className="mb-4 flex items-start justify-between gap-3"><div>
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-400">System Load</p>
