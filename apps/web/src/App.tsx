@@ -3,6 +3,7 @@ import { filterEntries, readEntries, writeEntries, STORAGE_KEY } from './entry-u
 import { Activity, Archive, Check, Circle, Clock3, Plus, Search, Sparkles } from 'lucide-react';
 import type { Recommendation } from '@lifeos/domain';
 import { NextBestActionCard } from './components/NextBestActionCard';
+import { OpenLoopsDashboard } from './components/OpenLoopsDashboard';
 
 type EntryType = 'task' | 'question' | 'follow-up' | 'idea' | 'event';
 type Entry = {
@@ -96,6 +97,7 @@ export default function App() {
         </header>
 
         <NextBestActionCard recommendation={nba} onAction={(action) => console.log(action)} />
+        <OpenLoopsDashboard />
 
         <section className="mb-5 rounded-3xl border border-amber-400/30 bg-gradient-to-br from-amber-400/[0.12] via-slate-900 to-slate-950 p-5 shadow-[0_0_38px_rgba(245,158,11,0.08)] sm:p-6">
           <div className="mb-4 flex items-center gap-2">
