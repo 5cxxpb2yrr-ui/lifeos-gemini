@@ -1,3 +1,5 @@
+export { listRecords, TABLES, upsertRecords } from './app.js';
+
 export interface Config { port: number; host: string; token: string; origins: string[]; surrealUrl: string }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
