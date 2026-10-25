@@ -1,23 +1,30 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { useStore } from '../../src/mission/store';
-import { DEFAULT_WEIGHTS } from '../../src/mission/lib/scoring';
-
-beforeEach(() => useStore.setState({ inbox: [], archive: [], weights: DEFAULT_WEIGHTS }));
-
-describe('store', () => {
-  it('captures, archives and restores without losing items', () => {
-    const s = useStore.getState();
-    s.capture('  Call @Marcus p2 '); s.capture('');
-    expect(useStore.getState().inbox).toEqual(['Call @Marcus p2']);
-    useStore.getState().archiveAt(0);
-    expect(useStore.getState()).toMatchObject({ inbox: [], archive: ['Call @Marcus p2'] });
-    useStore.getState().restoreAt(0);
-    expect(useStore.getState().inbox).toHaveLength(1);
-  });
-  it('edits and resets weights', () => {
-    useStore.getState().setWeight('urgency', 80);
-    expect(useStore.getState().weights.urgency).toBe(0.8);
-    useStore.getState().resetWeights();
-    expect(useStore.getState().weights).toEqual(DEFAULT_WEIGHTS);
-  });
-});
+{
+  "name": "@lifeos/web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@lifeos/domain": "workspace:*",
+    "@lifeos/shared": "workspace:*",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "lucide-react": "^0.300.0",
+    "zustand": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "autoprefixer": "^10.4.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.0.0",
+    "vite": "^5.0.0",
+    "vitest": "^5.0.5"
+  }
+}

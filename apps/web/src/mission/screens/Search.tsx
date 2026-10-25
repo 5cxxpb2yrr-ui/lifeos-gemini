@@ -8,13 +8,13 @@ export function Search({ items, onOpen }: { items: Searchable[]; onOpen?: (id: s
   return (
     <section>
       <h2 className="mb-3 text-xl font-semibold">Search</h2>
-      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search actions, people, accounts" aria-label="Search"
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search actions, people, accounts, projects, goals" aria-label="Search"
         className="mb-3 min-h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--bg)] px-3 text-[var(--text)]" />
       {hits.length ? hits.map((i) => (
-        <button key={i.id} onClick={() => onOpen?.(i.id)} className="mb-2 flex min-h-12 w-full items-center justify-between rounded-[22px] border border-[var(--line)] bg-[var(--surface-1)] px-3 text-left">
+        <button key={i.id} onClick={() => onOpen?.(i.id)} className="mb-2 flex min-h-12 w-full items-center justify-between rounded-[22px] border border-[var(--line)] bg-[var(--surface-1)] px-3 text-left text-sm">
           <span>{i.title}<span className="block text-xs text-[var(--text-2)]">{i.subtitle}</span></span><span className="text-[var(--text-2)]">›</span>
         </button>
-      )) : <p className="py-8 text-center text-[var(--text-2)]">No matches. Try a person or account name.</p>}
+      )) : <p className="py-8 text-center text-[var(--text-2)]">No matches. Try a person, account, project, or goal name.</p>}
     </section>
   );
 }

@@ -1,26 +1,102 @@
-import type { Option } from './lib/scoring';
+import { z } from 'zod';
 
-export type Variant = 'default' | 'decision' | 'risk' | 'opportunity' | 'relationship';
-export type Kind = 'execute' | 'decision' | 'risk' | 'waiting' | 'relationship';
-export interface Ref { type: 'bill' | 'decision' | 'person' | 'loop' | 'insight'; id: string }
+export type EntityType =
+  | 'person'
+  | 'task'
+  | 'goal'
+  | 'project'
+  | 'property'
+  | 'vehicle'
+  | 'document'
+  | 'subscription'
+  | 'organization'
+  | 'event'
+  | 'account'
+  | 'debt'
+  | 'asset';
 
-export interface Rec {
-  id: string; entity: string; title: string; context?: string; recommendation?: string;
-  outcome?: string; why?: string; impact: number; confidence: number; actions: string[];
-  kind?: Kind; ref?: Ref; hot?: boolean; factors?: [string, number][];
+export type WorkflowState = 'ACTIVE' | 'WAITING' | 'BLOCKED' | 'COMPLETE' | 'ARCHIVED';
+export type SignalState = 'DETECTED' | 'ACTIVE' | 'SUPPRESSED' | 'RESOLVED' | 'EXPIRED';
+export type RecommendationCategory =
+  | 'execute_now'
+  | 'decision_required'
+  | 'risk'
+  | 'waiting'
+  | 'opportunity'
+  | 'relationship'
+  | 'review';
+
+export interface Project {
+  id: string;
+  title: string;
+  category?: string;
+  status?: string;
+  progress?: number;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-// Domain records (shape of FULL_LIFE_CONTROL_BACKUP sections).
-export interface Payment { id?: string; date: string; amount: number; note?: string }
-export interface Bill {
-  id: string; title: string; payee?: string; category?: string; originalBalance: number; remainingBalance: number;
-  dueDate?: string; isRecurring?: boolean; apr?: number; minimum?: number; paymentHistory?: Payment[]; createdAt?: string; updatedAt?: string;
+export interface Goal {
+  id: string;
+  title: string;
+  level?: string;
+  progress?: number;
+  status?: string;
+  dueDate?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
-export interface Decision {
-  id: string; title: string; context?: string; expectedOutcome?: string; confidence?: number; risk?: 'High' | 'Medium' | 'Low';
-  reviewDate?: string; reviewed?: boolean; actualOutcome?: string; options?: Option[]; chosen?: string; decidedOn?: string; createdAt?: string; updatedAt?: string;
+
+export interface LinkRecord {
+  id: string;
+  sourceType: 'bill' | 'decision' | 'person' | 'loop' | 'insight' | 'project' | 'goal';
+  sourceId: string;
+  targetType: 'project' | 'goal';
+  targetId: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
-export interface Loop { id: string; title: string; status: string; createdDate?: string }
-export interface PersonRec { id: string; name: string; relationship?: string; lastContact?: string; frequencyDays?: number; phone?: string; updatedAt?: string }
-export interface Insight { id: string; tone?: string; text?: string }
-export interface LifeData { bills: Bill[]; decisions: Decision[]; loops: Loop[]; people: PersonRec[]; insights: Insight[]; extras?: Record<string, unknown> }
+
+export const EntitySchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  title: z.string(),
+  status: z.string(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export const ProjectSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  category: z.string().optional(),
+  status: z.string().optional(),
+  progress: z.number().min(0).max(100).default(0),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+
+export const GoalSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  level: z.string().optional(),
+  progress: z.number().min(0).max(100).default(0),
+  status: z.string().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+
+export interface Recommendation {
+  id: string;
+  entityId: string;
+  title: string;
+  category: RecommendationCategory;
+  recommendation: string;
+  whyThisMatters: string;
+  expectedOutcome: string;
+  impactScore: number;
+  confidenceScore: number;
+  urgencyScore: number;
+  actions: string[];
+}
