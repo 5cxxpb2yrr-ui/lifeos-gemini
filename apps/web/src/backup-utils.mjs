@@ -5,7 +5,7 @@
  * what to display and when to persist. Unknown sections are preserved as
  * counts/metadata only; this deliberately does not aggregate financial values.
  */
-const OPEN_LOOP_SECTIONS = ['openLoops', 'open_loops', 'tasks', 'questions', 'followUps', 'follow_ups', 'risks', 'commitments'];
+const OPEN_LOOP_SECTIONS = ['openLoops', 'open_loops', 'loops', 'tasks', 'questions', 'followUps', 'follow_ups', 'risks', 'commitments'];
 const EVENT_SECTIONS = ['events'];
 
 function isRecord(value) {
@@ -72,7 +72,7 @@ export function parseLifeOSBackup(input) {
     : [];
 
   return {
-    format: firstString(data, ['format', 'formatVersion']) || null,
+    format: firstString(data, ['format', 'formatVersion', '_format']) || null,
     schemaVersion: firstString(data, ['schemaVersion', 'schema_version']) || null,
     sectionCounts,
     totalRecords: Object.values(sectionCounts).reduce((sum, count) => sum + count, 0),
