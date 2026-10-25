@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - main
+      - feat/mission-control-integrated-preview
     paths:
       - 'apps/web/**'
       - 'packages/**'
