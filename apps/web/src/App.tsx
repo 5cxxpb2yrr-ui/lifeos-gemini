@@ -129,7 +129,13 @@ export default function App() {
               <BackupMetric label="Completed" value={backupSummary.completedLoops.length} />
               <BackupMetric label="Events" value={backupSummary.events.length} />
             </div>
-            {backupSummary.financialSections.length > 0 && <p className="mt-3 text-xs text-slate-400">Financial sections detected ({backupSummary.financialSections.join(', ')}). Balances are not combined.</p>}
+            {backupSummary.financialSections.length > 0 && <p className="mt-3 text-xs text-slate-400">Account, asset, and financial sections detected ({backupSummary.financialSections.join(', ')}). Balances are not combined.</p>}
+            <details className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+              <summary className="cursor-pointer text-sm font-semibold text-slate-300">All record sections ({Object.keys(backupSummary.sectionCounts).length})</summary>
+              <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {Object.entries(backupSummary.sectionCounts).sort(([a], [b]) => a.localeCompare(b)).map(([section, count]) => <li key={section} className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.04] px-2 py-2 text-xs"><span className="break-words text-slate-300">{section}</span><span className="font-bold tabular-nums text-amber-300">{count}</span></li>)}
+              </ul>
+            </details>
             {backupSummary.openLoops.length > 0 && <div className="mt-3 space-y-2">{backupSummary.openLoops.slice(0, 5).map((loop) => <div key={loop.id} className="rounded-xl border border-white/10 bg-black/20 p-3"><p className="text-sm font-medium">{loop.title}</p><p className="mt-1 text-xs text-slate-400">{loop.dueAt ? 'Due ' + new Date(loop.dueAt).toLocaleDateString() : 'No valid due date'} · {loop.type}</p></div>)}</div>}
             <p className="mt-3 text-[11px] text-slate-500">Preview only. Your existing local capture items were not overwritten.</p>
           </div>}
