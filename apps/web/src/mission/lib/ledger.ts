@@ -1,37 +1,88 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { getLinkedGoals, getLinkedProjects } from '../../src/mission/lib/linker';
-import { useStore } from '../../src/mission/store';
-import { DEFAULT_WEIGHTS } from '../../src/mission/lib/scoring';
+import { addMonths, iso } from './dates';
+import type { Bill, Decision, Goal, Insight, LifeData, LinkRecord, Loop, PersonRec, Project } from '../types';
+import type { Option } from './scoring';
 
-beforeEach(() => useStore.setState({ inbox: [], archive: [], weights: DEFAULT_WEIGHTS, data: { ...useStore.getState().data, projects: [...useStore.getState().data.projects], goals: [...useStore.getState().data.goals], links: [...useStore.getState().data.links] } }));
+const mapBy = <T extends { id: string }>(xs: T[] | undefined, id: string, f: (x: T) => T) => (xs ?? []).map((x) => (x.id === id ? f(x) : x));
 
-describe('store', () => {
-  it('captures, archives and restores without losing items', () => {
-    const s = useStore.getState();
-    s.capture('  Call @Marcus p2 '); s.capture('');
-    expect(useStore.getState().inbox).toEqual(['Call @Marcus p2']);
-    useStore.getState().archiveAt(0);
-    expect(useStore.getState()).toMatchObject({ inbox: [], archive: ['Call @Marcus p2'] });
-    useStore.getState().restoreAt(0);
-    expect(useStore.getState().inbox).toHaveLength(1);
-  });
-
-  it('edits and resets weights', () => {
-    useStore.getState().setWeight('urgency', 80);
-    expect(useStore.getState().weights.urgency).toBe(0.8);
-    useStore.getState().resetWeights();
-    expect(useStore.getState().weights).toEqual(DEFAULT_WEIGHTS);
-  });
-
-  it('creates and links projects and goals', () => {
-    const projectId = useStore.getState().createProject('Home office refresh');
-    const goalId = useStore.getState().createGoal('Buy a house');
-    const billId = useStore.getState().data.bills[0].id;
-    useStore.getState().linkEntity('bill', billId, 'project', projectId);
-    useStore.getState().linkEntity('bill', billId, 'goal', goalId);
-
-    const data = useStore.getState().data;
-    expect(getLinkedProjects(data, 'bill', billId).some((p) => p.id === projectId)).toBe(true);
-    expect(getLinkedGoals(data, 'bill', billId).some((g) => g.id === goalId)).toBe(true);
-  });
+export const payBill = (d: LifeData, id: string, amount: number, now = new Date()): LifeData => ({
+  ...d,
+  bills: mapBy(d.bills, id, (b) => {
+    let remaining = Math.max(0, Number((b.remainingBalance - amount).toFixed(2)));
+    let due = b.dueDate;
+    if (remaining === 0 && b.isRecurring) { remaining = b.originalBalance; if (due) due = addMonths(due, 1); }
+    return { ...b, remainingBalance: remaining, dueDate: due, updatedAt: now.toISOString(),
+      paymentHistory: [...(b.paymentHistory ?? []), { id: `pay_${now.getTime().toString(36)}`, date: iso(now), amount, note: 'Recorded in Mission Control' }] };
+  }),
 });
+export const setTerms = (d: LifeData, id: string, t: { apr?: number; minimum?: number }, now = new Date()): LifeData =>
+  ({ ...d, bills: mapBy(d.bills, id, (b) => ({ ...b, apr: t.apr, minimum: t.minimum, updatedAt: now.toISOString() })) });
+export const addOption = (d: LifeData, id: string, o: Option, now = new Date()): LifeData =>
+  ({ ...d, decisions: mapBy(d.decisions, id, (x) => ({ ...x, options: [...(x.options ?? []), o], updatedAt: now.toISOString() })) });
+/** Choosing an option records the decision and marks it reviewed (it leaves the briefing). */
+export const chooseOption = (d: LifeData, id: string, idx: number, now = new Date()): LifeData =>
+  ({ ...d, decisions: mapBy(d.decisions, id, (x) => (x.options?.[idx] ? { ...x, chosen: x.options[idx].name, reviewed: true, decidedOn: iso(now), updatedAt: now.toISOString() } : x)) });
+export const logContact = (d: LifeData, id: string, now = new Date()): LifeData =>
+  ({ ...d, people: mapBy(d.people, id, (p) => ({ ...p, lastContact: iso(now), updatedAt: now.toISOString() })) });
+export const savePerson = (d: LifeData, id: string, patch: { phone?: string; frequencyDays?: number }, now = new Date()): LifeData =>
+  ({ ...d, people: mapBy(d.people, id, (p) => ({ ...p, ...patch, updatedAt: now.toISOString() })) });
+export const addPerson = (d: LifeData, id: string, name: string, now = new Date()): LifeData =>
+  ({ ...d, people: [...d.people, { id, name, relationship: '', updatedAt: now.toISOString() }] });
+
+const SECTIONS = ['bills', 'decisions', 'loops', 'people', 'insights', 'projects', 'goals', 'links'];
+const num = (v: unknown, f = 0) => { const n = Number(v); return Number.isFinite(n) ? n : f; };
+const normBill = (x: Record<string, unknown>, n: number): Bill => ({
+  ...(x as object), id: String(x.id ?? `imp_${n}`), title: String(x.title ?? x.name ?? 'Untitled'), payee: String(x.payee ?? x.vendor ?? ''),
+  originalBalance: num(x.originalBalance ?? x.balance), remainingBalance: num(x.remainingBalance ?? x.balance),
+  dueDate: x.dueDate ? String(x.dueDate) : undefined, isRecurring: Boolean(x.isRecurring ?? x.frequency),
+  minimum: x.minimum === undefined && x.minPayment === undefined ? undefined : num(x.minimum ?? x.minPayment),
+  paymentHistory: Array.isArray(x.paymentHistory) ? (x.paymentHistory as Bill['paymentHistory']) : [],
+} as Bill);
+const normProject = (x: Record<string, unknown>): Project => ({
+  id: String(x.id ?? 'project_' + Math.random().toString(36).slice(2, 8)),
+  title: String(x.title ?? x.name ?? 'Untitled project'),
+  category: x.category ? String(x.category) : undefined,
+  status: x.status ? String(x.status) : 'active',
+  progress: num(x.progress, 0),
+  description: x.description ? String(x.description) : undefined,
+  createdAt: x.createdAt ? String(x.createdAt) : undefined,
+  updatedAt: x.updatedAt ? String(x.updatedAt) : undefined,
+});
+const normGoal = (x: Record<string, unknown>): Goal => ({
+  id: String(x.id ?? 'goal_' + Math.random().toString(36).slice(2, 8)),
+  title: String(x.title ?? x.name ?? 'Untitled goal'),
+  level: x.level ? String(x.level) : undefined,
+  progress: num(x.progress, 0),
+  status: x.status ? String(x.status) : 'active',
+  dueDate: x.dueDate ? String(x.dueDate) : undefined,
+  createdAt: x.createdAt ? String(x.createdAt) : undefined,
+  updatedAt: x.updatedAt ? String(x.updatedAt) : undefined,
+});
+const normLink = (x: Record<string, unknown>): LinkRecord => ({
+  id: String(x.id ?? 'link_' + Math.random().toString(36).slice(2, 8)),
+  sourceType: (String(x.sourceType ?? 'bill') as LinkRecord['sourceType']),
+  sourceId: String(x.sourceId ?? ''),
+  targetType: (String(x.targetType ?? 'project') as LinkRecord['targetType']),
+  targetId: String(x.targetId ?? ''),
+  createdAt: x.createdAt ? String(x.createdAt) : undefined,
+  updatedAt: x.updatedAt ? String(x.updatedAt) : undefined,
+});
+
+/** Accepts a FULL_LIFE_CONTROL_BACKUP, or a ledger export (`records`/`ledger` array, or a bare array of bills). */
+export function normalizeBackup(raw: unknown): LifeData | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const arr = Array.isArray(raw) ? raw : r.bills ?? r.records ?? r.ledger;
+  if (!Array.isArray(arr)) return null;
+  const list = <T,>(k: string) => (Array.isArray(r[k]) ? (r[k] as T[]) : []);
+  return {
+    bills: arr.map((x, n) => normBill(x as Record<string, unknown>, n)),
+    decisions: list<Decision>('decisions'), loops: list<Loop>('loops'), people: list<PersonRec>('people'), insights: list<Insight>('insights'),
+    projects: list<Record<string, unknown>>('projects').map(normProject),
+    goals: list<Record<string, unknown>>('goals').map(normGoal),
+    links: list<Record<string, unknown>>('links').map(normLink),
+    extras: Array.isArray(raw) ? undefined : Object.fromEntries(Object.entries(r).filter(([k]) => !SECTIONS.includes(k))),
+  };
+}
+/** Merge edits back over every untouched section so a full backup round-trips. */
+export const exportBackup = (d: LifeData) => ({ ...d.extras, bills: d.bills, decisions: d.decisions, loops: d.loops, people: d.people, insights: d.insights, projects: d.projects, goals: d.goals, links: d.links });
+
