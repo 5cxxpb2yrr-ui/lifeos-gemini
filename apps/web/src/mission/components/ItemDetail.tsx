@@ -36,7 +36,7 @@ export function ItemDetail({ rec, data, nav, onAct }: { rec: Rec; data: LifeData
           {rec.factors.map(([l, v]) => (
             <div key={l} className="mt-2"><p className="text-xs text-[var(--text-2)]">{l} · {Math.round(v * 100)}%</p><div className="h-1.5 overflow-hidden rounded bg-[#26334f]"><i className="block h-full rounded bg-[var(--blue)]" style={{ width: `${Math.round(v * 100)}%` }} /></div></div>
           ))}
-          <p className="mt-2 text-xs text-[var(--text-2)]">Impact = {share(w, 'urgency')}% urgency + {share(w, 'exposure')}% exposure + {share(w, 'consequence')}% consequence. Confidence = {share(w, 'confidence')}% model confidence.</p>
+          <p className="mt-2 text-xs text-[var(--text-2)]">Impact = {share(w, 'urgency')}% urgency + {share(w, 'exposure')}% exposure + {share(w, 'consequence')}% consequence. Confidence = {share(w, 'completeness')}% data completeness + {share(w, 'freshness')}% freshness.</p>
         </details>
       )}
       <div className="mt-3 flex gap-2">{rec.actions.map((a, i) => <button key={a} onClick={() => onAct(rec, a)} className={`${i === 0 ? btnP : btn} flex-1`}>{a}</button>)}</div>
