@@ -1,0 +1,6 @@
+:root {
+  --bg: #0A0B0D; --surface-1: #111318; --surface-2: #151820; --surface-3: #1A1F29;
+  --text: #F8FAFC; --text-2: #A1AAB8; --text-3: #6B7280; --line: #232A38;
+  --blue: #3B82F6; --risk: #F59E0B; --opp: #22C55E; --critical: #EF4444;
+  --m1: 120ms; --m2: 180ms; --m3: 240ms;
+}
