@@ -1,0 +1,64 @@
+name: Repair pnpm lockfile
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/restore-api-package-manifest-20261025
+    paths:
+      - "services/api/package.json"
+      - "apps/web/package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/repair-lockfile.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repair-lockfile-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  regenerate-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out isolated repair branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Regenerate lockfile from workspace manifests
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Commit regenerated lockfile to this repair branch
+        run: |
+          if git diff --quiet -- pnpm-lock.yaml; then
+            echo "Lockfile already matches workspace manifests."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add pnpm-lock.yaml
+            git commit -m "fix: sync pnpm lockfile with API workspace"
+            git push origin "HEAD:${{ github.ref_name }}"
+          fi
+
+      - name: Verify frozen install now succeeds
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace
+        run: pnpm build
+
+      - name: Run tests
+        run: pnpm test
