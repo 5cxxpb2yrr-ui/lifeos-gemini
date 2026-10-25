@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { filterEntries, readEntries, writeEntries, STORAGE_KEY } from './entry-utils.mjs';
+import { readLifeOSBackupFile } from './backup-utils.mjs';
 import { Activity, Archive, Check, Circle, Clock3, Plus, Search, Sparkles } from 'lucide-react';
 import type { Recommendation } from '@lifeos/domain';
 import { NextBestActionCard } from './components/NextBestActionCard';
@@ -46,6 +47,23 @@ export default function App() {
   const [type, setType] = useState<EntryType>('task');
   const [query, setQuery] = useState('');
   const [showCompleted, setShowCompleted] = useState(false);
+  const [backupSummary, setBackupSummary] = useState<Awaited<ReturnType<typeof readLifeOSBackupFile>> | null>(null);
+  const [backupError, setBackupError] = useState('');
+  const [backupName, setBackupName] = useState('');
+
+  async function loadBackup(file?: File) {
+    if (!file) return;
+    setBackupError('');
+    try {
+      const summary = await readLifeOSBackupFile(file);
+      setBackupSummary(summary);
+      setBackupName(file.name);
+    } catch (error) {
+      setBackupSummary(null);
+      setBackupName('');
+      setBackupError(error instanceof Error ? error.message : 'Could not read this backup.');
+    }
+  }
 
   useEffect(() => {
     try {
@@ -95,6 +113,27 @@ export default function App() {
             <p className="text-sm font-semibold">{today}</p>
           </div>
         </header>
+
+
+        <section className="mb-5 rounded-3xl border border-amber-400/25 bg-slate-900/70 p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="font-bold">Load LifeOS Backup</h2><p className="mt-1 text-xs text-slate-400">Read a JSON file on this device. Nothing is uploaded or imported into the graph.</p></div>
+            <label className="inline-flex min-h-11 cursor-pointer items-center rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 text-sm font-semibold text-amber-200 hover:bg-amber-400/15">Choose JSON<input aria-label="Choose LifeOS backup JSON" type="file" accept=".json,application/json" className="sr-only" onChange={(event) => { void loadBackup(event.currentTarget.files?.[0]); event.currentTarget.value = ''; }} /></label>
+          </div>
+          {backupError && <p role="alert" className="mt-3 text-sm text-rose-300">{backupError}</p>}
+          {backupSummary && <div className="mt-4 border-t border-white/10 pt-4">
+            <p className="text-xs text-emerald-300">Read locally: {backupName}</p>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <BackupMetric label="Records" value={backupSummary.totalRecords} />
+              <BackupMetric label="Open loops" value={backupSummary.openLoops.length} />
+              <BackupMetric label="Completed" value={backupSummary.completedLoops.length} />
+              <BackupMetric label="Events" value={backupSummary.events.length} />
+            </div>
+            {backupSummary.financialSections.length > 0 && <p className="mt-3 text-xs text-slate-400">Financial sections detected ({backupSummary.financialSections.join(', ')}). Balances are not combined.</p>}
+            {backupSummary.openLoops.length > 0 && <div className="mt-3 space-y-2">{backupSummary.openLoops.slice(0, 5).map((loop) => <div key={loop.id} className="rounded-xl border border-white/10 bg-black/20 p-3"><p className="text-sm font-medium">{loop.title}</p><p className="mt-1 text-xs text-slate-400">{loop.dueAt ? 'Due ' + new Date(loop.dueAt).toLocaleDateString() : 'No valid due date'} · {loop.type}</p></div>)}</div>}
+            <p className="mt-3 text-[11px] text-slate-500">Preview only. Your existing local capture items were not overwritten.</p>
+          </div>}
+        </section>
 
         <NextBestActionCard recommendation={nba} onAction={(action) => console.log(action)} />
         <OpenLoopsDashboard />
@@ -177,4 +216,8 @@ export default function App() {
       </div>
     </main>
   );
+}
+
+function BackupMetric({ label, value }: { label: string; value: number }) {
+  return <div className="rounded-xl border border-white/10 bg-black/20 p-3"><p className="text-2xl font-bold tabular-nums text-amber-300">{value}</p><p className="mt-1 text-xs text-slate-400">{label}</p></div>;
 }
