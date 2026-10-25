@@ -1,11 +1,11 @@
-import { OptionsPanel } from './components/OptionsPanel';
-import { ScoreRing } from './components/ScoreRing';
-import { band, share } from './lib/scoring';
-import { getLinkedGoals, getLinkedProjects } from './lib/linker';
-import type { Nav } from './nav';
-import { useStore } from './store';
-import type { LifeData, Rec } from './types';
-import { btn, btnP } from './ui';
+import { OptionsPanel } from './OptionsPanel';
+import { ScoreRing } from './ScoreRing';
+import { band, share } from '../lib/scoring';
+import { getLinkedGoals, getLinkedProjects } from '../lib/linker';
+import type { Nav } from '../nav';
+import { useStore } from '../store';
+import type { LifeData, Rec } from '../types';
+import { btn, btnP } from '../ui';
 
 export function ItemDetail({ rec, data, nav, onAct }: { rec: Rec; data: LifeData; nav: Nav; onAct: (r: Rec, a: string) => void }) {
   const { snoozeItem, weights: w } = useStore();
