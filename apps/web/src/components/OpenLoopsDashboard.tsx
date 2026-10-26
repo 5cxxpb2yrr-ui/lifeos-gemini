@@ -9,7 +9,7 @@ const samples: OpenLoopSourceRecord[] = [
   { id: 'demo-question-1', type: 'question', title: 'Confirm the next bill due date', status: 'WAITING', createdAt: hoursFromNow(-48), updatedAt: hoursFromNow(-2), dueAt: hoursFromNow(20), priority: 'normal', linkedEntityIds: ['demo-entity-2'] },
   { id: 'demo-follow-up-1', type: 'follow_up', title: 'Follow up on service transfer', status: 'ACTIVE', createdAt: hoursFromNow(-24), updatedAt: hoursFromNow(-1), nextActionAt: hoursFromNow(52), priority: 'high', linkedEntityIds: ['demo-entity-1'] },
   { id: 'demo-risk-1', type: 'risk', title: 'Check for any move-day gaps', status: 'BLOCKED', createdAt: hoursFromNow(-120), updatedAt: hoursFromNow(-12), priority: 'high', linkedEntityIds: ['demo-entity-3'] },
-  { id: 'demo-event-1', type: 'event_follow_up', title: 'Send meeting follow-up', status: 'ACTIVE', createdAt: hoursFromNow(-30), updatedAt: hoursFromNow(-3), dueAt: hoursFromNow(12), priority: 'medium', linkedEntityIds: ['demo-entity-4'], requiresFollowUp: true },
+  { id: 'demo-event-1', type: 'event_follow_up', title: 'Send meeting follow-up', status: 'ACTIVE', createdAt: hoursFromNow(-30), updatedAt: hoursFromNow(-3), dueAt: hoursFromNow(12), priority: 'normal', linkedEntityIds: ['demo-entity-4'], requiresFollowUp: true },
 ];
 const filters: { label: string; value: OpenLoopTiming | 'all' }[] = [
   { label: 'All', value: 'all' }, { label: 'Overdue', value: 'overdue' },
