@@ -5,6 +5,7 @@ import { lifeosTheme as t } from '@lifeos/shared';
 interface Props {
   recommendation: Recommendation;
   onAction?: (action: string) => void;
+  sample?: boolean;
 }
 
 function Metric({ label, value, color }: { label: string; value: string; color: string }) {
@@ -25,7 +26,9 @@ function Panel({ title, body }: { title: string; body: string }) {
   );
 }
 
-export function NextBestActionCard({ recommendation: r, onAction }: Props) {
+export function NextBestActionCard({ recommendation: r, onAction, sample = false }: Props) {
+  const actionDisabled = !onAction;
+
   return (
     <section
       className="relative mb-6 overflow-hidden border p-6 backdrop-blur-xl"
@@ -41,7 +44,7 @@ export function NextBestActionCard({ recommendation: r, onAction }: Props) {
           className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider"
           style={{ color: t.colors.electricBlue }}
         >
-          <Sparkles size={14} /> Next Best Action
+          <Sparkles size={14} /> Next Best Action{sample ? ' · Sample' : ''}
         </span>
         <span
           className="flex items-center gap-0.5 border px-3 py-1 text-xs"
@@ -55,6 +58,8 @@ export function NextBestActionCard({ recommendation: r, onAction }: Props) {
           High Impact <ChevronRight size={12} />
         </span>
       </div>
+
+      {sample && <p className="mb-3 text-xs" style={{ color: t.colors.textSecondary }}>Example recommendation, not live account data.</p>}
 
       <h2 className="text-xl font-bold" style={{ color: t.colors.textPrimary }}>{r.title}</h2>
       <p className="mb-4 text-sm" style={{ color: t.colors.textSecondary }}>{r.recommendation}</p>
@@ -71,8 +76,11 @@ export function NextBestActionCard({ recommendation: r, onAction }: Props) {
         {r.actions.map((a, i) => (
           <button
             key={a}
+            type="button"
             onClick={() => onAction?.(a)}
-            className="flex-1 py-3 text-sm font-semibold text-white transition active:opacity-80"
+            disabled={actionDisabled}
+            title={actionDisabled ? 'Not connected yet' : undefined}
+            className="flex-1 py-3 text-sm font-semibold text-white transition active:opacity-80 disabled:cursor-not-allowed disabled:opacity-60"
             style={{
               borderRadius: t.radii.button,
               background: i === 0 ? t.colors.electricBlueGlow : 'rgba(255,255,255,0.1)',
