@@ -6,7 +6,7 @@ function makeStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
   return {
     getItem(key) {
-      return Object.prototype.hasOwnProperty.call(values, key) ? values.get(key) : null;
+      return values.has(key) ? values.get(key) : null;
     },
     setItem(key, value) {
       values.set(key, String(value));
