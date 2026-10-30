@@ -1,48 +1,62 @@
-import type { Goal, LifeData, LinkRecord, LinkSourceType, LinkTargetType, Project } from '../types';
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import { addDays, iso } from './lib/dates';
+import * as L from './lib/ledger';
+import { DEFAULT_WEIGHTS, type Option, type Weights } from './lib/scoring';
+import { SEED } from './seed';
+import type { LifeData } from './types';
 
-export const slugify = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
-
-export function listLinksFor(data: LifeData, sourceType: LinkSourceType, sourceId: string): LinkRecord[] {
-  return data.links.filter((link) => link.sourceType === sourceType && link.sourceId === sourceId);
+export interface SyncConfig { url: string; token: string }
+interface State {
+  inbox: string[]; archive: string[]; weights: Weights; data: LifeData;
+  /** When the inbox/archive/weights/snooze state last changed (used to sync that state between devices). */
+  uiAt: string; sync: SyncConfig; setSync: (c: SyncConfig) => void;
+  /** id -> 'done' | 'until:YYYY-MM-DD' (snoozed) */
+  resolved: Record<string, string>;
+  capture: (t: string) => void; archiveAt: (i: number) => void; restoreAt: (i: number) => void;
+  setWeight: (k: keyof Weights, pct: number) => void; resetWeights: () => void;
+  resolveItem: (id: string) => void; snoozeItem: (id: string, now?: Date) => void;
+  pay: (billId: string, amount: number) => void; terms: (billId: string, t: { apr?: number; minimum?: number }) => void;
+  addOption: (decisionId: string, o: Option) => void; choose: (decisionId: string, idx: number) => void;
+  addProject: (title: string) => string; addGoal: (title: string) => string; setProgress: (kind: 'project' | 'goal', id: string, pct: number) => void;
+  logContact: (personId: string) => void; savePerson: (personId: string, p: { phone?: string; frequencyDays?: number }) => void; addPerson: (name: string) => string;
+  importBackup: (raw: unknown) => boolean; resetData: () => void;
 }
 
-export function getLinkedProjects(data: LifeData, sourceType: LinkSourceType, sourceId: string): Project[] {
-  const targets = listLinksFor(data, sourceType, sourceId).filter((link) => link.targetType === 'project');
-  return targets.map((link) => data.projects.find((project) => project.id === link.targetId)).filter(Boolean) as Project[];
-}
-
-export function getLinkedGoals(data: LifeData, sourceType: LinkSourceType, sourceId: string): Goal[] {
-  const targets = listLinksFor(data, sourceType, sourceId).filter((link) => link.targetType === 'goal');
-  return targets.map((link) => data.goals.find((goal) => goal.id === link.targetId)).filter(Boolean) as Goal[];
-}
-
-export function addLink(data: LifeData, sourceType: LinkSourceType, sourceId: string, targetType: LinkTargetType, targetId: string, now = new Date()): LifeData {
-  if (!sourceId || !targetId) return data;
-  if (data.links.some((link) => link.sourceType === sourceType && link.sourceId === sourceId && link.targetType === targetType && link.targetId === targetId)) {
-    return data;
-  }
+export const useStore = create<State>()(persist((set) => {
+  const edit = (f: (d: LifeData) => LifeData) => set((s) => ({ data: f(s.data) }));
   return {
-    ...data,
-    links: [
-      ...data.links,
-      { id: `link_${now.getTime().toString(36)}_${Math.random().toString(36).slice(2, 6)}`, sourceType, sourceId, targetType, targetId, createdAt: now.toISOString(), updatedAt: now.toISOString() },
-    ],
+    inbox: [], archive: [], weights: DEFAULT_WEIGHTS, data: SEED, resolved: {}, uiAt: '', sync: { url: '', token: '' },
+    setSync: (c) => set({ sync: { url: c.url.trim(), token: c.token.trim() } }),
+    capture: (t) => { const v = t.trim(); if (v) set((s) => ({ inbox: [v, ...s.inbox], uiAt: new Date().toISOString() })); },
+    // Archived, never deleted.
+    archiveAt: (i) => set((s) => { const x = s.inbox[i]; return x === undefined ? s : { inbox: s.inbox.filter((_, n) => n !== i), archive: [x, ...s.archive], uiAt: new Date().toISOString() }; }),
+    restoreAt: (i) => set((s) => { const x = s.archive[i]; return x === undefined ? s : { archive: s.archive.filter((_, n) => n !== i), inbox: [x, ...s.inbox], uiAt: new Date().toISOString() }; }),
+    setWeight: (k, pct) => set((s) => ({ weights: { ...s.weights, [k]: Math.max(0, pct) / 100 }, uiAt: new Date().toISOString() })),
+    resetWeights: () => set({ weights: DEFAULT_WEIGHTS, uiAt: new Date().toISOString() }),
+    resolveItem: (id) => set((s) => ({ resolved: { ...s.resolved, [id]: 'done' }, uiAt: new Date().toISOString() })),
+    snoozeItem: (id, now = new Date()) => set((s) => ({ resolved: { ...s.resolved, [id]: `until:${addDays(iso(now), 1)}` }, uiAt: new Date().toISOString() })),
+    pay: (id, amount) => edit((d) => L.payBill(d, id, amount)),
+    terms: (id, t) => edit((d) => L.setTerms(d, id, t)),
+    addOption: (id, o) => edit((d) => L.addOption(d, id, o)),
+    choose: (id, idx) => edit((d) => L.chooseOption(d, id, idx)),
+    addProject: (title) => { const id = `prj_${Date.now().toString(36)}`; edit((d) => L.addProject(d, id, title)); return id; },
+    addGoal: (title) => { const id = `goal_${Date.now().toString(36)}`; edit((d) => L.addGoal(d, id, title)); return id; },
+    setProgress: (kind, id, pct) => edit((d) => L.setProgress(d, kind, id, pct)),
+    logContact: (id) => edit((d) => L.logContact(d, id)),
+    savePerson: (id, p) => edit((d) => L.savePerson(d, id, p)),
+    addPerson: (name) => { const id = `p_${Date.now().toString(36)}`; edit((d) => L.addPerson(d, id, name)); return id; },
+    importBackup: (raw) => { const d = L.normalizeBackup(raw); if (!d) return false; set({ data: d, resolved: {} }); return true; },
+    resetData: () => set({ data: SEED, resolved: {} }),
   };
-}
+}, {
+  name: 'lifeos-mission-control',
+  // Older saved data predates projects and goals: fill any missing section from the seed.
+  merge: (persisted, current) => { const p = (persisted ?? {}) as Partial<State>; return { ...current, ...p, data: { ...current.data, ...(p.data ?? {}) } }; },
+}));
 
-export function removeLink(data: LifeData, sourceType: LinkSourceType, sourceId: string, targetType: LinkTargetType, targetId: string): LifeData {
-  return {
-    ...data,
-    links: data.links.filter((link) => !(link.sourceType === sourceType && link.sourceId === sourceId && link.targetType === targetType && link.targetId === targetId)),
-  };
-}
-
-export function findProjectByTitle(data: LifeData, title: string): Project | undefined {
-  const value = slugify(title);
-  return data.projects.find((project) => slugify(project.title) === value);
-}
-
-export function findGoalByTitle(data: LifeData, title: string): Goal | undefined {
-  const value = slugify(title);
-  return data.goals.find((goal) => slugify(goal.title) === value);
-}
+/** Is this recommendation visible today (not done, not snoozed)? */
+export const isLive = (resolved: Record<string, string>, id: string, now = new Date()) => {
+  const v = resolved[id];
+  return !v || (v !== 'done' && v.slice(6) <= iso(now));
+};

@@ -23,7 +23,7 @@ describe('screens render', () => {
     expect(renderToString(<More onView={noop} />)).toContain('Scoring weights');
     const app = renderToString(<App />);
     expect(app).toContain('NEXT BEST ACTION');
-    expect(app).toContain('Pay HVAC Repair');
+    expect(app).toMatch(/Pay [A-Z]/); // the hero depends on today's date, so only check that a bill action leads
   });
   it('renders the secondary views', () => {
     expect(renderToString(<SystemCheck data={SEED} inboxCount={0} go={noop} onBack={noop} />)).toContain('System check');

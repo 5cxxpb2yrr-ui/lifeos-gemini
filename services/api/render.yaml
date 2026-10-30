@@ -1,0 +1,20 @@
+# Reference Blueprint for Render (not verified against Render). A persistent disk requires a paid instance.
+services:
+  - type: web
+    name: lifeos-api
+    runtime: docker
+    dockerContext: services/api
+    dockerfilePath: services/api/Dockerfile
+    plan: starter
+    healthCheckPath: /health
+    disk:
+      name: lifeos-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: API_TOKEN
+        generateValue: true
+      - key: ALLOWED_ORIGIN
+        value: https://5cxxpb2yrr-ui.github.io
+      - key: SURREAL_URL
+        value: surrealkv:///data/lifeos

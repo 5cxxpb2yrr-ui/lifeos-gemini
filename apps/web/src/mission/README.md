@@ -27,5 +27,16 @@ Nothing to add. It uses only `react`, `react-dom` and `zustand`, which `@lifeos/
 - Calendar links open Google Calendar; there is no sync.
 - No backend or SurrealDB wiring.
 
+## Sync (optional)
+More -> "Sync between devices": enter the API URL and token (see `services/api`). The app pulls, merges by timestamp (newest record wins, nothing is deleted), pushes what the server lacks, and repeats on start, on return to the app, when back online, and shortly after local changes. The token is stored in this browser only. With no API configured, everything stays on the device.
+
+## Links
+`>project` and `^goal` tags resolve against your projects and goals (exact title, or every word starts a word in exactly one title). Green chips open the record; unknown names offer to add one. Records can use `title` or `name`.
+
 ## Tests
-Tests live in `apps/web/tests/mission/` so the production `tsc` build does not need a test runner. To run them: `pnpm add -D vitest --filter @lifeos/web` (updates the lockfile, commit it), then `pnpm --filter @lifeos/web exec vitest run tests/mission` (20 tests).
+Tests live in `apps/web/tests/mission/` so the production `tsc` build does not need a test runner. To run them: `pnpm add -D vitest --filter @lifeos/web` (updates the lockfile, commit it), then `pnpm --filter @lifeos/web exec vitest run tests/mission` (35 tests).
+
+## Not done
+- Sections of a full backup that the app does not edit are not synced.
+- Calendar links open Google Calendar; there is no sync.
+- Mapping to the `Recommendation` type in `@lifeos/domain` is not done.
