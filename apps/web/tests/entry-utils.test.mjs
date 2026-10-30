@@ -1,42 +1,109 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { filterEntries, isEntry, readEntries, writeEntries, STORAGE_KEY } from '../src/entry-utils.mjs';
+import { loadEntries, STORAGE_KEY } from '../src/entry-utils.mjs';
 
-function memoryStorage(initial = {}) {
-  const data = new Map(Object.entries(initial));
+function makeStorage(initial = {}) {
+  const values = new Map(Object.entries(initial));
   return {
-    getItem(key) { return data.has(key) ? data.get(key) : null; },
-    setItem(key, value) { data.set(key, String(value)); },
-    data,
+    getItem(key) {
+      return values.has(key) ? values.get(key) : null;
+    },
+    setItem(key, value) {
+      values.set(key, String(value));
+    },
   };
 }
 
-const openTask = { id: '1', title: 'Call the utility company', type: 'task', createdAt: '2026-10-23T12:00:00.000Z', completedAt: null };
-const closedTask = { ...openTask, id: '2', title: 'Review the budget', completedAt: '2026-10-23T13:00:00.000Z' };
+const entry = {
+  id: 'entry-1',
+  title: 'Call the utility company',
+  type: 'task',
+  createdAt: '2026-10-23T09:00:00.000Z',
+  completedAt: null,
+};
 
-test('capture data survives a write/read round trip', () => {
-  const storage = memoryStorage();
-  assert.equal(writeEntries(storage, [openTask]), true);
-  assert.deepEqual(readEntries(storage), [openTask]);
-  assert.ok(storage.getItem(STORAGE_KEY));
+test('loadEntries returns healthy entries', () => {
+  const storage = makeStorage({ [STORAGE_KEY]: JSON.stringify([entry]) });
+  const result = loadEntries(storage, STORAGE_KEY, '2026-10-23T09:05:00.000Z');
+
+  assert.deepEqual(result.entries, [entry]);
+  assert.equal(result.status, 'ok');
+  assert.equal(result.backupKey, null);
+  assert.equal(result.dropped, 0);
 });
 
-test('malformed storage and invalid records safely produce an empty or filtered list', () => {
-  assert.deepEqual(readEntries(memoryStorage({ [STORAGE_KEY]: '{broken' })), []);
-  const storage = memoryStorage({ [STORAGE_KEY]: JSON.stringify([openTask, { ...openTask, type: 'unknown' }, { ...openTask, createdAt: 'not-a-date' }]) });
-  assert.deepEqual(readEntries(storage), [openTask]);
-  assert.equal(isEntry({ ...openTask, title: '   ' }), false);
+test('loadEntries treats empty storage as empty', () => {
+  const storage = makeStorage({ [STORAGE_KEY]: '' });
+  const result = loadEntries(storage, STORAGE_KEY, '2026-10-23T09:05:00.000Z');
+
+  assert.deepEqual(result.entries, []);
+  assert.equal(result.status, 'empty');
+  assert.equal(result.backupKey, null);
+  assert.equal(result.dropped, 0);
 });
 
-test('search matches title and type and filters open versus completed entries', () => {
-  assert.deepEqual(filterEntries([openTask, closedTask], 'utility', false), [openTask]);
-  assert.deepEqual(filterEntries([openTask, closedTask], 'budget', true), [closedTask]);
-  assert.deepEqual(filterEntries([openTask, closedTask], 'task', false), [openTask]);
-  assert.deepEqual(filterEntries([openTask, closedTask], 'missing', false), []);
+test('loadEntries recovers corrupt JSON', () => {
+  const storage = makeStorage({ [STORAGE_KEY]: '{bad json' });
+  const result = loadEntries(storage, STORAGE_KEY, '2026-10-23T09:05:00.000Z');
+
+  assert.deepEqual(result.entries, []);
+  assert.equal(result.status, 'corrupt');
+  assert.ok(result.backupKey && result.backupKey.startsWith(`${STORAGE_KEY}.recovered-`));
+  assert.equal(storage.getItem(result.backupKey), '{bad json');
 });
 
-test('storage write failures do not crash the app', () => {
-  const unavailable = { setItem() { throw new Error('quota exceeded'); }, getItem() { throw new Error('blocked'); } };
-  assert.equal(writeEntries(unavailable, [openTask]), false);
-  assert.deepEqual(readEntries(unavailable), []);
+test('loadEntries keeps valid entries when some records are invalid', () => {
+  const storage = makeStorage({
+    [STORAGE_KEY]: JSON.stringify([
+      entry,
+      { ...entry, id: 'bad-entry', title: '', type: 'task', createdAt: 'bad-date' },
+    ]),
+  });
+
+  const result = loadEntries(storage, STORAGE_KEY, '2026-10-23T09:05:00.000Z');
+
+  assert.deepEqual(result.entries, [entry]);
+  assert.equal(result.status, 'partial');
+  assert.equal(result.dropped, 1);
+  assert.ok(result.backupKey && result.backupKey.startsWith(`${STORAGE_KEY}.recovered-`));
+  assert.match(storage.getItem(result.backupKey), /\[\{\s*"id":\s*"entry-1"/);
+});
+
+test('loadEntries marks storage as unavailable when reading fails', () => {
+  const storage = {
+    getItem() {
+      throw new Error('blocked');
+    },
+    setItem() {
+      throw new Error('blocked');
+    },
+  };
+
+  const result = loadEntries(storage, STORAGE_KEY, '2026-10-23T09:05:00.000Z');
+
+  assert.deepEqual(result.entries, []);
+  assert.equal(result.status, 'unavailable');
+  assert.equal(result.backupKey, null);
+});
+
+test('loadEntries reports unavailable when recovery write fails under full storage', () => {
+  const storage = {
+    getItem(key) {
+      if (key === STORAGE_KEY) {
+        return JSON.stringify([{ ...entry, title: '' }]);
+      }
+      return null;
+    },
+    setItem(key) {
+      if (key.startsWith(`${STORAGE_KEY}.recovered-`)) {
+        throw new Error('quota exceeded');
+      }
+    },
+  };
+
+  const result = loadEntries(storage, STORAGE_KEY, '2026-10-23T09:05:00.000Z');
+
+  assert.deepEqual(result.entries, []);
+  assert.equal(result.status, 'unavailable');
+  assert.equal(result.backupKey, null);
 });

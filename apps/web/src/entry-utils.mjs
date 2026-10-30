@@ -16,15 +16,60 @@ export function isEntry(value) {
   );
 }
 
-export function readEntries(storage, key = STORAGE_KEY) {
+export function loadEntries(storage, key = STORAGE_KEY, now = new Date()) {
+  const recoveredKey = `${key}.recovered-${new Date(now).toISOString()}`;
+
   try {
     const raw = storage.getItem(key);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(isEntry) : [];
+    if (raw === null || raw.trim() === '') {
+      return { entries: [], status: 'empty', backupKey: null, dropped: 0 };
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      try {
+        storage.setItem(recoveredKey, raw);
+      } catch {
+        return { entries: [], status: 'unavailable', backupKey: null, dropped: 0 };
+      }
+      return { entries: [], status: 'corrupt', backupKey: recoveredKey, dropped: 0 };
+    }
+
+    if (!Array.isArray(parsed)) {
+      try {
+        storage.setItem(recoveredKey, raw);
+      } catch {
+        return { entries: [], status: 'unavailable', backupKey: null, dropped: 0 };
+      }
+      return { entries: [], status: 'corrupt', backupKey: recoveredKey, dropped: 0 };
+    }
+
+    const entries = parsed.filter(isEntry);
+    const dropped = parsed.length - entries.length;
+    if (dropped > 0) {
+      try {
+        storage.setItem(recoveredKey, raw);
+      } catch {
+        return { entries: [], status: 'unavailable', backupKey: null, dropped: 0 };
+      }
+      return { entries, status: 'partial', backupKey: recoveredKey, dropped };
+    }
+
+    return {
+      entries,
+      status: entries.length === 0 ? 'empty' : 'ok',
+      backupKey: null,
+      dropped: 0,
+    };
   } catch {
-    return [];
+    return { entries: [], status: 'unavailable', backupKey: null, dropped: 0 };
   }
+}
+
+export function readEntries(storage, key = STORAGE_KEY) {
+  return loadEntries(storage, key).entries;
 }
 
 export function writeEntries(storage, entries, key = STORAGE_KEY) {

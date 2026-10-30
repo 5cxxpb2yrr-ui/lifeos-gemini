@@ -26,13 +26,13 @@ export type RecommendationCategory =
   | 'relationship'
   | 'review';
 
-export const EntitySchema = z.object({
-  id: z.string(),
-  type: z.string(),
-  title: z.string(),
-  status: z.string(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+export const EntitySchema = /* @__PURE__ */ z.object({
+  id: /* @__PURE__ */ z.string(),
+  type: /* @__PURE__ */ z.string(),
+  title: /* @__PURE__ */ z.string(),
+  status: /* @__PURE__ */ z.string(),
+  createdAt: /* @__PURE__ */ z.date(),
+  updatedAt: /* @__PURE__ */ z.date(),
 });
 
 export interface Recommendation {
@@ -48,7 +48,6 @@ export interface Recommendation {
   urgencyScore: number;
   actions: string[];
 }
-
 
 export type OpenLoopType = 'task' | 'question' | 'follow_up' | 'risk' | 'commitment' | 'event_follow_up';
 export type OpenLoopTiming = 'overdue' | 'next_72_hours' | 'later' | 'no_due_date';
