@@ -8,7 +8,11 @@ The Mission Control UI is a projection of the operating system, not the system i
 
 `Capture / Command → Immutable Event → Projection → Resolver → Recommendation → User Action → Outcome Event`
 
-The first implementation keeps the canonical record types to Event, Open Loop, Person, and Asset. Relationships are explicit and symmetric. Goals, decisions, streams, finance records, and notes can be represented as metadata or linked records without expanding primary navigation.
+The first implementation keeps the canonical record types to Event, Open Loop, Person, and Asset. Relationships are explicit and symmetric. **Areas** describe ongoing parts of life (such as Health, Finances, Relationships, Work, and Home) and connect the same records; they do not become separate mini-applications. Goals, decisions, finance details, and notes can be represented as linked records or supporting data without expanding primary navigation.
+
+## Product ethos
+
+LifeOS should be simpler, more natural, and easier to navigate. Prefer familiar words over internal systems terminology. Keep the interface focused on what needs attention, and let the underlying model handle complexity. A feature belongs only when it reduces the effort of managing life. Do not add a new object type, workspace, metric, or workflow when an existing record and relationship can express the same thing.
 
 ## First backend vertical slice
 
