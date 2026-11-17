@@ -113,7 +113,7 @@ export default function App() {
   function completeLoop(item: LifeObject) {
     const timestamp = new Date().toISOString();
     const completion: LifeObject = { id: id(), type: 'event', title: `Closed loop: ${item.title}`, occurredAt: timestamp, createdAt: timestamp, updatedAt: timestamp, relatedIds: [item.id, ...item.relatedIds], streams: item.streams ?? [] };
-    setObjects((all) => all.map((x) => x.id === item.id ? { ...x, status: 'complete', updatedAt: timestamp } : x).concat(completion));
+    setObjects((all) => all.map((x) => x.id === item.id ? { ...x, status: 'complete' as const, updatedAt: timestamp } : x).concat(completion));
   }
   function setLoopStatus(item: LifeObject, status: LoopStatus) {
     setObjects((all) => all.map((x) => x.id === item.id ? { ...x, status, updatedAt: new Date().toISOString() } : x));
