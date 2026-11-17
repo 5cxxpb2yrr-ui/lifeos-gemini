@@ -19,6 +19,8 @@ export function surrealConfig() {
 export class SurrealStore {
   constructor(config = surrealConfig()) {
     this.config = config;
+    this.lastSequence = 0;
+    this.sequenceInitialized = false;
   }
 
   async query(sql) {
@@ -59,8 +61,10 @@ export class SurrealStore {
   }
 
   async append(eventType, payload, occurredAt = new Date().toISOString()) {
+    if (!this.sequenceInitialized) await this.readEvents();
+    this.lastSequence = Math.max(this.lastSequence + 1, Date.now() * 1000);
     const eventId = `evt_${randomUUID().replaceAll('-', '')}`;
-    const event = { eventId, eventType, occurredAt, payload };
+    const event = { eventId, eventType, sequence: this.lastSequence, recordedAt: new Date().toISOString(), occurredAt, payload };
     // IDs are generated here and all values are serialized as JSON literals.
     // Event records are CREATE-only: canonical history is never overwritten.
     await this.query(`CREATE life_event:${eventId} CONTENT ${JSON.stringify(event)};`);
@@ -68,8 +72,11 @@ export class SurrealStore {
   }
 
   async readEvents() {
-    const response = await this.query('SELECT * FROM life_event ORDER BY occurredAt ASC;');
+    const response = await this.query('SELECT * FROM life_event;');
     const statement = Array.isArray(response) ? response.at(-1) : null;
-    return Array.isArray(statement?.result) ? statement.result : [];
+    const events = Array.isArray(statement?.result) ? statement.result : [];
+    this.lastSequence = Math.max(this.lastSequence, ...events.map((event) => Number(event.sequence) || 0));
+    this.sequenceInitialized = true;
+    return events;
   }
 }
