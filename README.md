@@ -1,28 +1,45 @@
-# LifeOS - Mission Control Gemini
+# LifeOS — Personal Operating System
 
-LifeOS is a **Decision Operating System (DOS)** designed to continuously turn information into decisions, decisions into actions, and actions into outcomes.
+LifeOS is an event-driven personal operating system. Mission Control is a projection of the system, not its source of truth.
 
 ## Architecture
-- **Frontend:** React + TypeScript + Vite + Tailwind + Zustand
-- **Backend:** Fastify + TypeScript + Zod
-- **Database:** SurrealDB (Graph Native)
-- **Monorepo Manager:** pnpm + Turborepo
 
-## Visual Specification
-The visual design enforces the Mission Control Strategic Operations Center aesthetic:
-- Near-black background (`#0A0B0D`)
-- Electric blue glow (`#3B82F6`) & Fire Amber alerts (`#F59E0B`)
-- Recommendation-centered UX with Next Best Action (NBA) hero card.
+- **Web:** React + TypeScript + Vite + Tailwind + Zustand
+- **API:** Node.js HTTP service (native runtime; no framework overhead)
+- **Database:** SurrealDB, with an append-only event history and rebuildable projections
+- **Workspace:** pnpm + Turborepo
 
-## Workspace
-- `packages/domain` - entity, signal and recommendation types (Zod)
-- `packages/shared` - `lifeosTheme` design tokens
-- `apps/web` - React/Vite Mission Control UI with the `NextBestActionCard`
-- `services/` - reserved (API and SurrealDB not scaffolded yet)
+The canonical record types are Event, Open Loop, Person, and Asset. Commands append immutable events; deterministic projectors rebuild current state. The UI must not become a second source of truth.
 
-## Getting Started
-```bash
-pnpm install
-pnpm build
-pnpm dev
+## Run the API locally
+
+1. Copy `.env.example` to `.env`.
+2. Change `SURREAL_PASS` and `LIFEOS_API_TOKEN` to private values.
+3. Start the database and API:
+
+```sh
+docker compose up --build
 ```
+
+The API listens on `http://localhost:8787`. Its schema is initialized automatically.
+
+- `GET /health`
+- `GET /v1/state` (Bearer token required)
+- `GET /v1/timeline` (Bearer token required)
+- `POST /v1/objects`
+- `PATCH /v1/objects/:id`
+- `POST /v1/objects/:id/relations`
+- `POST /v1/loops/:id/complete`
+- `POST /v1/capture`
+
+Authenticated routes require `Authorization: Bearer <LIFEOS_API_TOKEN>`. Keep this token on the server; never embed it in browser code.
+
+## Validate
+
+```sh
+pnpm install --frozen-lockfile
+pnpm test
+pnpm build
+```
+
+See [docs/LIFEOS-OPERATING-SYSTEM.md](docs/LIFEOS-OPERATING-SYSTEM.md) for the event model, invariants, and next implementation slices.
