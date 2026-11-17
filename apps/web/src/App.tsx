@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import {
   Activity, ArrowLeft, ArrowRight, Bell, CalendarDays, Check, ChevronRight,
   CircleDot, Clock3, Home, Plus, Search, Sparkles, UserRound, Car, X,
-  AlertTriangle, Link2, Inbox, Hourglass, CheckCircle2, SlidersHorizontal,
+  AlertTriangle, Link2, Inbox, Hourglass, CheckCircle2, SlidersHorizontal, Download,
 } from 'lucide-react';
 import { resolveLifeLoad, type LifeObject, type LifeObjectType, type LoopPriority, type LoopStatus } from '@lifeos/domain';
 
@@ -15,7 +15,8 @@ function readWorkspace(): LifeObject[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((item) => item && typeof item.id === 'string' && ['event', 'loop', 'person', 'asset'].includes(item.type)).map((item) => ({ ...item, areas: item.areas ?? item.streams ?? [] })) : [];
+    const demoIds = new Set(['asset-subaru','asset-home','person-family','person-contractor','event-oil','event-dinner','event-service-window','loop-quote','loop-registration','loop-bloodwork']);
+    return Array.isArray(parsed) ? parsed.filter((item) => item && typeof item.id === 'string' && !demoIds.has(item.id) && ['event', 'loop', 'person', 'asset'].includes(item.type)).map((item) => ({ ...item, areas: item.areas ?? item.streams ?? [], relatedIds: (item.relatedIds ?? []).filter((id: string) => !demoIds.has(id)) })) : [];
   } catch { return []; }
 }
 const fmt = (value?: string | null) => value ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', ...(new Date(value).getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) }).format(new Date(value)) : 'No date';
@@ -73,6 +74,16 @@ export default function App() {
   function back() { setScreenStack((stack) => stack.length > 1 ? stack.slice(0,-1) : ['home']); }
   function go(screen: Screen) { setScreenStack([screen]); }
   function openCapture() { setCaptureText(''); setCaptureKind('auto'); setRelatedId(''); setCaptureDueDate(''); setCapturePriority('normal'); setCaptureWaitingOn(''); setCaptureOpen(true); }
+  function exportWorkspace() {
+    const backup = { app: 'LifeOS', schemaVersion: 1, exportedAt: new Date().toISOString(), objects };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'lifeos-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
   function addObjects(items: LifeObject[]) { setObjects((all) => [...items, ...all.map((existing) => { const links = items.filter((item) => item.relatedIds.includes(existing.id)).map((item) => item.id); return links.length ? { ...existing, relatedIds: [...new Set([...existing.relatedIds, ...links])] } : existing; })]); }
   function addObject(item: LifeObject) { addObjects([item]); }
   function capture(event: FormEvent<HTMLFormElement>) {
@@ -146,7 +157,7 @@ export default function App() {
           <nav className="space-y-2">
             {([['home','Mission Control',Home],['loops','Open Loops',CircleDot],['timeline','Timeline',CalendarDays],['search','Search',Search]] as const).map(([key,label,Icon]) => <button key={key} onClick={() => go(key)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${current === key ? 'bg-blue-500/15 text-blue-200' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><Icon size={17}/>{label}</button>)}
           </nav>
-          <div className="mt-auto rounded-2xl border border-white/10 bg-white/[0.03] p-4"><p className="text-[10px] uppercase tracking-widest text-slate-500">Life Load</p><p className="mt-1 text-3xl font-bold tabular-nums" style={{color:loadTone}}>{load.score}</p><p className="text-xs text-slate-400">{load.band}</p></div>
+          <div className="mt-auto rounded-2xl border border-white/10 bg-white/[0.03] p-4"><p className="text-[10px] uppercase tracking-widest text-slate-500">Life Load estimate</p><p className="mt-1 text-3xl font-bold tabular-nums" style={{color:loadTone}}>{objects.length ? load.score : "—"}</p><p className="text-xs text-slate-400">{objects.length ? load.band : "No records yet"}</p></div>
         </aside>
 
         <div className="min-w-0 flex-1">
@@ -157,7 +168,7 @@ export default function App() {
                 <div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-blue-300 md:hidden">LifeOS</p><h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl">{pageTitle}</h1></div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <button onClick={() => go('search')} aria-label="Search" className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><Search size={18}/></button>
+                <button onClick={exportWorkspace} aria-label="Download backup" title="Download a backup of this browser workspace" className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><Download size={17}/></button><button onClick={() => go('search')} aria-label="Search" className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><Search size={18}/></button>
                 <button onClick={openCapture} aria-label="Capture" className="grid h-10 w-10 place-items-center rounded-xl bg-amber-400 text-slate-950 shadow-[0_0_22px_rgba(251,191,36,.2)]"><Plus size={21}/></button>
               </div>
             </div>
@@ -168,7 +179,7 @@ export default function App() {
               {objects.length === 0 && <div className="rounded-3xl border border-blue-400/20 bg-gradient-to-br from-blue-950/50 to-slate-950 p-6 sm:p-8"><p className="text-xs font-bold uppercase tracking-[.18em] text-blue-300">Your life, in one place</p><h2 className="mt-3 max-w-xl text-2xl font-bold sm:text-3xl">Start with what’s on your mind.</h2><p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-400">Capture a commitment, record something that happened, or add a person or asset. LifeOS will connect the pieces as you go.</p><button onClick={openCapture} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-amber-400 px-5 text-sm font-bold text-slate-950"><Plus size={17}/> Make your first capture</button></div>}
               <div className="grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
                 <button onClick={() => setShowLoadDetails((v)=>!v)} className="rounded-3xl border p-5 text-left transition hover:border-white/20 sm:p-6" style={{borderColor:loadTone+'55',background:'linear-gradient(135deg,#111d2d,#0b1320)'}}>
-                  <div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-slate-400">Life Load · early estimate</p><p className="mt-2 text-5xl font-black tabular-nums" style={{color:loadTone}}>{load.score}<span className="ml-2 text-sm font-semibold">{load.band}</span></p><p className="mt-2 text-xs text-slate-400">{load.openCount} unresolved commitments · tap to inspect drivers</p></div><div className="grid h-14 w-14 place-items-center rounded-2xl" style={{background:loadTone+'18',color:loadTone}}><Activity size={27}/></div></div>
+                  <div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-slate-400">Life Load · early estimate</p><p className="mt-2 text-5xl font-black tabular-nums" style={{color:loadTone}}>{objects.length ? load.score : "—"}<span className="ml-2 text-sm font-semibold">{objects.length ? load.band : "No data yet"}</span></p><p className="mt-2 text-xs text-slate-400">{objects.length ? `${load.openCount} unresolved commitments · tap to inspect drivers` : "Capture a few records to establish your operating picture."}</p></div><div className="grid h-14 w-14 place-items-center rounded-2xl" style={{background:loadTone+'18',color:loadTone}}><Activity size={27}/></div></div>
                   <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full transition-all" style={{width:`${Math.min(100,load.score/200*100)}%`,background:loadTone}}/></div>
                   <div className="mt-2 flex justify-between text-[9px] uppercase tracking-wider text-slate-500"><span>Calm 0</span><span>Stable 26</span><span>Busy 76</span><span>Stressed 126</span><span>Critical 176+</span></div>
                 </button>
