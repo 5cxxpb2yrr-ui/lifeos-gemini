@@ -77,6 +77,11 @@ export class SurrealStore {
     const events = Array.isArray(statement?.result) ? statement.result : [];
     this.lastSequence = Math.max(this.lastSequence, ...events.map((event) => Number(event.sequence) || 0));
     this.sequenceInitialized = true;
-    return events;
+    return events.sort((a, b) => {
+      const aSequence = Number(a.sequence);
+      const bSequence = Number(b.sequence);
+      if (Number.isFinite(aSequence) && Number.isFinite(bSequence) && aSequence !== bSequence) return aSequence - bSequence;
+      return String(a.recordedAt ?? a.occurredAt).localeCompare(String(b.recordedAt ?? b.occurredAt)) || String(a.eventId).localeCompare(String(b.eventId));
+    });
   }
 }
