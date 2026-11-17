@@ -1,0 +1,40 @@
+name: Refresh pnpm lockfile
+
+on:
+  push:
+    branches:
+      - compact
+    paths:
+      - 'apps/web/package.json'
+      - '.github/workflows/refresh-pnpm-lock.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+      - name: Resolve and write lockfile
+        run: pnpm install --no-frozen-lockfile
+      - name: Commit updated lockfile
+        run: |
+          if git diff --quiet -- pnpm-lock.yaml; then
+            echo "Lockfile is already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml
+          git commit -m "chore: refresh pnpm lockfile"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
