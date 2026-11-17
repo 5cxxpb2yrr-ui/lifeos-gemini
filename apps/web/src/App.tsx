@@ -10,29 +10,13 @@ type Screen = 'home' | 'loops' | 'timeline' | 'search' | { detailId: string };
 type CaptureKind = 'auto' | LifeObjectType;
 const STORAGE_KEY = 'lifeos.v3.workspace.v1';
 
-const now = Date.now();
-const ago = (days: number) => new Date(now - days * 86400000).toISOString();
-const future = (days: number) => new Date(now + days * 86400000).toISOString();
-const seed: LifeObject[] = [
-  { id: 'asset-subaru', type: 'asset', title: '2019 Subaru Crosstrek Limited', assetType: 'Vehicle', createdAt: ago(180), updatedAt: ago(2), value: null, notes: '2.0L FB20D · Maintenance history and factory procedures.', areas: ['Vehicles'], relatedIds: ['event-oil'] },
-  { id: 'asset-home', type: 'asset', title: 'Home', assetType: 'Property', createdAt: ago(500), updatedAt: ago(12), notes: 'Home maintenance, utilities, and renewals.', areas: ['Home'], relatedIds: [] },
-  { id: 'person-family', type: 'person', title: 'Family', personType: 'Family', createdAt: ago(500), updatedAt: ago(5), notes: 'Keep relationships intentional.', areas: ['Family'], relatedIds: ['event-dinner'] },
-  { id: 'person-contractor', type: 'person', title: 'Contractor', personType: 'Service provider', createdAt: ago(40), updatedAt: ago(8), notes: 'Waiting on a quote for the home repair.', areas: ['Home'], relatedIds: ['loop-quote'] },
-  { id: 'event-oil', type: 'event', title: 'Changed engine oil and filter', occurredAt: ago(14), createdAt: ago(14), updatedAt: ago(14), notes: 'Service record · next interval 5,000 miles.', areas: ['Vehicles'], relatedIds: ['asset-subaru'] },
-  { id: 'event-dinner', type: 'event', title: 'Dinner with family', occurredAt: ago(2), createdAt: ago(2), updatedAt: ago(2), areas: ['Family'], relatedIds: ['person-family'] },
-  { id: 'event-service-window', type: 'event', title: 'Next oil service window opens', occurredAt: future(4), createdAt: ago(1), updatedAt: ago(1), notes: 'Planning marker · verify mileage before scheduling.', areas: ['Vehicles'], relatedIds: ['asset-subaru'] },
-  { id: 'loop-quote', type: 'loop', title: 'Follow up on contractor quote', status: 'waiting', priority: 'high', waitingOn: 'Contractor', createdAt: ago(8), updatedAt: ago(1), dueAt: future(1), areas: ['Home'], relatedIds: ['person-contractor', 'asset-home'] },
-  { id: 'loop-registration', type: 'loop', title: 'Renew vehicle registration', status: 'open', priority: 'urgent', risk: true, createdAt: ago(12), updatedAt: ago(1), dueAt: future(2), areas: ['Vehicles'], relatedIds: ['asset-subaru'] },
-  { id: 'loop-bloodwork', type: 'loop', title: 'Schedule follow-up blood work', status: 'active', priority: 'normal', createdAt: ago(3), updatedAt: ago(1), dueAt: future(5), areas: ['Health'], relatedIds: [] },
-];
-
 function readWorkspace(): LifeObject[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return seed;
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((item) => item && typeof item.id === 'string' && ['event', 'loop', 'person', 'asset'].includes(item.type)).map((item) => ({ ...item, areas: item.areas ?? item.streams ?? [] })) : seed;
-  } catch { return seed; }
+    return Array.isArray(parsed) ? parsed.filter((item) => item && typeof item.id === 'string' && ['event', 'loop', 'person', 'asset'].includes(item.type)).map((item) => ({ ...item, areas: item.areas ?? item.streams ?? [] })) : [];
+  } catch { return []; }
 }
 const fmt = (value?: string | null) => value ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', ...(new Date(value).getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) }).format(new Date(value)) : 'No date';
 const fmtTime = (value?: string) => value ? new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value)) : 'Date not set';
@@ -54,6 +38,11 @@ export default function App() {
   const [searchText, setSearchText] = useState('');
   const [loopFilter, setLoopFilter] = useState<'all' | LoopStatus>('all');
   const [showLoadDetails, setShowLoadDetails] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [linkTargetId, setLinkTargetId] = useState('');
+  const [areaDraft, setAreaDraft] = useState('');
   const current = screenStack[screenStack.length - 1];
   const activeDetail = typeof current === 'object' ? objects.find((item) => item.id === current.detailId) : undefined;
   const load = useMemo(() => resolveLifeLoad(objects), [objects]);
@@ -69,6 +58,7 @@ export default function App() {
   });
 
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(objects)); } catch { /* session remains usable */ } }, [objects]);
+  useEffect(() => { setEditTitle(activeDetail?.title ?? ''); setEditNotes(activeDetail?.notes ?? ''); setEditing(false); setLinkTargetId(''); setAreaDraft(''); }, [activeDetail?.id]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setScreenStack(['search']); }
@@ -83,7 +73,8 @@ export default function App() {
   function back() { setScreenStack((stack) => stack.length > 1 ? stack.slice(0,-1) : ['home']); }
   function go(screen: Screen) { setScreenStack([screen]); }
   function openCapture() { setCaptureText(''); setCaptureKind('auto'); setRelatedId(''); setCaptureDueDate(''); setCapturePriority('normal'); setCaptureWaitingOn(''); setCaptureOpen(true); }
-  function addObject(item: LifeObject) { setObjects((all) => [item, ...all]); }
+  function addObjects(items: LifeObject[]) { setObjects((all) => [...items, ...all.map((existing) => { const links = items.filter((item) => item.relatedIds.includes(existing.id)).map((item) => item.id); return links.length ? { ...existing, relatedIds: [...new Set([...existing.relatedIds, ...links])] } : existing; })]); }
+  function addObject(item: LifeObject) { addObjects([item]); }
   function capture(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = captureText.trim();
@@ -106,7 +97,7 @@ export default function App() {
         const created: LifeObject[] = [];
         if (eventPart) created.push({ ...common, id: eventId!, title: eventPart.replace(/[.!?]+$/, ''), type: 'event', occurredAt: timestamp, relatedIds: [...common.relatedIds, ...(loopId ? [loopId] : [])] });
         if (loopPart) created.push({ ...common, id: loopId!, title: loopPart.replace(/[.!?]+$/, ''), type: 'loop', status: /waiting on/i.test(loopPart) ? 'waiting' : 'open', priority: capturePriority, dueAt: captureDueDate ? new Date(`${captureDueDate}T12:00:00`).toISOString() : null, waitingOn: captureWaitingOn || (/(waiting on|waiting for)/i.test(loopPart) ? 'Someone else' : null), relatedIds: [...common.relatedIds, ...(eventId ? [eventId] : [])] });
-        setObjects((all) => [...created, ...all]);
+        addObjects(created);
       } else addObject({ ...common, type: 'event', occurredAt: timestamp });
     }
     setCaptureOpen(false);
@@ -115,13 +106,32 @@ export default function App() {
   function completeLoop(item: LifeObject) {
     const timestamp = new Date().toISOString();
     const completion: LifeObject = { id: id(), type: 'event', title: `Closed loop: ${item.title}`, occurredAt: timestamp, createdAt: timestamp, updatedAt: timestamp, relatedIds: [item.id, ...item.relatedIds], areas: item.areas ?? [] };
-    setObjects((all) => all.map((x) => x.id === item.id ? { ...x, status: 'complete' as const, updatedAt: timestamp } : x).concat(completion));
+    setObjects((all) => all.map((x) => x.id === item.id ? { ...x, status: 'complete' as const, updatedAt: timestamp, relatedIds: [...new Set([...x.relatedIds, completion.id])] } : x).concat(completion));
   }
   function setLoopStatus(item: LifeObject, status: LoopStatus) {
     setObjects((all) => all.map((x) => x.id === item.id ? { ...x, status: status as LoopStatus, updatedAt: new Date().toISOString() } : x));
   }
   function updateLoop(item: LifeObject, patch: Partial<LifeObject>) {
     setObjects((all) => all.map((x) => x.id === item.id ? { ...x, ...patch, updatedAt: new Date().toISOString() } : x));
+  }
+  function saveDetails() {
+    if (!activeDetail || !editTitle.trim()) return;
+    updateLoop(activeDetail, { title: editTitle.trim(), notes: editNotes.trim() });
+    setEditing(false);
+  }
+  function linkContext() {
+    if (!activeDetail || !linkTargetId) return;
+    setObjects((all) => all.map((x) => x.id === activeDetail.id || x.id === linkTargetId ? { ...x, relatedIds: [...new Set([...x.relatedIds, x.id === activeDetail.id ? linkTargetId : activeDetail.id])] } : x));
+    setLinkTargetId('');
+  }
+  function addArea(value = areaDraft) {
+    if (!activeDetail || !value.trim()) return;
+    const area = value.trim().replace(/\s+/g, ' ');
+    updateLoop(activeDetail, { areas: [...new Set([...(activeDetail.areas ?? []), area])] });
+    setAreaDraft('');
+  }
+  function removeArea(area: string) {
+    if (activeDetail) updateLoop(activeDetail, { areas: (activeDetail.areas ?? []).filter((item) => item !== area) });
   }
   function related(item: LifeObject) { return objects.filter((candidate) => candidate.id !== item.id && item.relatedIds.includes(candidate.id)); }
 
@@ -157,7 +167,7 @@ export default function App() {
             {current === 'home' && <section className="space-y-5">
               <div className="grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
                 <button onClick={() => setShowLoadDetails((v)=>!v)} className="rounded-3xl border p-5 text-left transition hover:border-white/20 sm:p-6" style={{borderColor:loadTone+'55',background:'linear-gradient(135deg,#111d2d,#0b1320)'}}>
-                  <div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-slate-400">Life Load Index</p><p className="mt-2 text-5xl font-black tabular-nums" style={{color:loadTone}}>{load.score}<span className="ml-2 text-sm font-semibold">{load.band}</span></p><p className="mt-2 text-xs text-slate-400">{load.openCount} unresolved commitments · tap to inspect drivers</p></div><div className="grid h-14 w-14 place-items-center rounded-2xl" style={{background:loadTone+'18',color:loadTone}}><Activity size={27}/></div></div>
+                  <div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-slate-400">Life Load · early estimate</p><p className="mt-2 text-5xl font-black tabular-nums" style={{color:loadTone}}>{load.score}<span className="ml-2 text-sm font-semibold">{load.band}</span></p><p className="mt-2 text-xs text-slate-400">{load.openCount} unresolved commitments · tap to inspect drivers</p></div><div className="grid h-14 w-14 place-items-center rounded-2xl" style={{background:loadTone+'18',color:loadTone}}><Activity size={27}/></div></div>
                   <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full transition-all" style={{width:`${Math.min(100,load.score/200*100)}%`,background:loadTone}}/></div>
                   <div className="mt-2 flex justify-between text-[9px] uppercase tracking-wider text-slate-500"><span>Calm 0</span><span>Stable 26</span><span>Busy 76</span><span>Stressed 126</span><span>Critical 176+</span></div>
                 </button>
