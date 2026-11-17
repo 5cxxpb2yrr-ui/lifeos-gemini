@@ -134,7 +134,7 @@ export interface LifeObject {
   assetType?: string;
   value?: number | null;
   notes?: string;
-  streams?: string[];
+  areas?: string[];
   relatedIds: string[];
 }
 export type LifeLoadBand = 'Calm' | 'Stable' | 'Busy' | 'Stressed' | 'Critical';
