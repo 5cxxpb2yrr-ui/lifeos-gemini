@@ -1,0 +1,36 @@
+services:
+  surrealdb:
+    image: surrealdb/surrealdb:v2
+    command:
+      - start
+      - --user
+      - root
+      - --pass
+      - ${SURREAL_PASS:?Set SURREAL_PASS in .env}
+      - file:/data/lifeos.db
+      - --bind
+      - 0.0.0.0:8000
+    volumes:
+      - lifeos-data:/data
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    environment:
+      PORT: 8787
+      SURREAL_URL: http://surrealdb:8000
+      SURREAL_NAMESPACE: ${SURREAL_NAMESPACE:-lifeos}
+      SURREAL_DATABASE: ${SURREAL_DATABASE:-main}
+      SURREAL_USER: root
+      SURREAL_PASS: ${SURREAL_PASS:?Set SURREAL_PASS in .env}
+      LIFEOS_API_TOKEN: ${LIFEOS_API_TOKEN:?Set LIFEOS_API_TOKEN in .env}
+    ports:
+      - "8787:8787"
+    depends_on:
+      - surrealdb
+    restart: unless-stopped
+
+volumes:
+  lifeos-data:
