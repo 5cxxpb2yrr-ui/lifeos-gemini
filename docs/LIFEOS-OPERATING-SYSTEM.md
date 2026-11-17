@@ -14,6 +14,15 @@ The first implementation keeps the canonical record types to Event, Open Loop, P
 
 LifeOS should be simpler, more natural, and easier to navigate. Prefer familiar words over internal systems terminology. Keep the interface focused on what needs attention, and let the underlying model handle complexity. A feature belongs only when it reduces the effort of managing life. Do not add a new object type, workspace, metric, or workflow when an existing record and relationship can express the same thing.
 
+## Identity and workspace boundary
+
+- Neon Managed Better Auth is provisioned in the dedicated `lifeos` Neon project, on its `main` branch in `aws-us-east-2`.
+- The Vite client uses `@neon/auth` and `BetterAuthReactAdapter()` with the branch Auth URL. Email/password sign-up and sign-in are enabled; email verification is currently off for the initial personal preview.
+- The GitHub Pages origin `https://5cxxpb2yrr-ui.github.io` is trusted; localhost is enabled for development.
+- Browser workspace keys include the authenticated Neon user ID, preventing two accounts in the same browser from loading the same workspace.
+- **This is identity only, not cloud sync.** Workspace records still live in `localStorage`; sign-in does not encrypt them or protect them from someone with access to the browser profile.
+- The SurrealDB API is still disconnected from the UI and still uses its server-side bearer-token guard. Never put `LIFEOS_API_TOKEN` in browser code. Neon session/JWT verification and user-scoped event storage must be implemented before connecting the API.
+
 ## First backend vertical slice
 
 - Append-only `life_event` records in SurrealDB.
@@ -57,4 +66,4 @@ Run with `pnpm --filter @lifeos/api test` and `pnpm --filter @lifeos/api start`.
 3. Add domain resolvers for life load, time, cash pressure, asset maintenance, and relationship attention.
 4. Add a capture interpreter that proposes a typed change set for confirmation where confidence is low.
 5. Connect the UI to the API; remove seeded records and browser-only canonical storage.
-6. Add authentication and per-user data isolation before any real personal data is stored.
+6. Verify Neon Auth JWTs at the API boundary and add user ownership to every event and projection before enabling cloud sync.
