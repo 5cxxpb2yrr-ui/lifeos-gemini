@@ -2,7 +2,7 @@
 
 ## Architectural correction
 
-The Mission Control UI is a projection of the operating system, not the system itself. Canonical history lives in an append-only SurrealDB event store. Current state is derived by replaying events through deterministic projectors. The UI must never become a second source of truth. The current web preview is local-first and stores its workspace in browser storage; it is not yet connected to the SurrealDB API.
+The Mission Control UI is a projection of the operating system, not the system itself. Canonical history lives in an append-only SurrealDB event store. Current state is derived by replaying events through deterministic projectors. The UI must never become a second source of truth. The current web preview is local-first and stores its workspace in browser storage and supports JSON backup/restore; it is not yet connected to the SurrealDB API.
 
 ## Canonical flow
 
