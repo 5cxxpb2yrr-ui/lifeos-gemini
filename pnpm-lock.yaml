@@ -29,9 +29,6 @@ importers:
       '@lifeos/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@neon/auth':
-        specifier: ^0.8.2
-        version: 0.8.2(kysely@0.29.9)(nanostores@1.5.5)(react-dom@18.3.1)(react@18.3.1)
       lucide-react:
         specifier: ^0.300.0
         version: 0.300.0(react@18.3.1)
