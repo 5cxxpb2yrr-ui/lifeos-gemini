@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   Activity, ArrowLeft, ArrowRight, Bell, CalendarDays, Check, ChevronRight,
   CircleDot, Clock3, Home, Plus, Search, Sparkles, UserRound, Car, X,
-  AlertTriangle, Link2, Inbox, Hourglass, CheckCircle2, SlidersHorizontal, Download,
+  AlertTriangle, Link2, Inbox, Hourglass, CheckCircle2, SlidersHorizontal, Download, Upload,
 } from 'lucide-react';
 import { resolveLifeLoad, type LifeObject, type LifeObjectType, type LoopPriority, type LoopStatus } from '@lifeos/domain';
 
@@ -44,6 +44,7 @@ export default function App() {
   const [editNotes, setEditNotes] = useState('');
   const [linkTargetId, setLinkTargetId] = useState('');
   const [areaDraft, setAreaDraft] = useState('');
+  const backupInputRef = useRef<HTMLInputElement>(null);
   const current = screenStack[screenStack.length - 1];
   const activeDetail = typeof current === 'object' ? objects.find((item) => item.id === current.detailId) : undefined;
   const load = useMemo(() => resolveLifeLoad(objects), [objects]);
@@ -83,6 +84,23 @@ export default function App() {
     anchor.download = 'lifeos-backup-' + new Date().toISOString().slice(0, 10) + '.json';
     anchor.click();
     URL.revokeObjectURL(url);
+  }
+  async function importWorkspace(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text());
+      const imported = Array.isArray(parsed) ? parsed : parsed.objects;
+      if (!Array.isArray(imported) || imported.some((item) => !item || typeof item.id !== 'string' || typeof item.title !== 'string' || !['event','loop','person','asset'].includes(item.type))) throw new Error('This is not a valid LifeOS backup.');
+      if (!window.confirm('Replace the records in this browser with the records from this backup?')) return;
+      setObjects(imported.map((item) => ({ ...item, areas: item.areas ?? item.streams ?? [], relatedIds: Array.isArray(item.relatedIds) ? item.relatedIds : [] })));
+      setScreenStack(['home']);
+      setCaptureOpen(false);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Could not restore this backup.');
+    } finally {
+      event.target.value = '';
+    }
   }
   function addObjects(items: LifeObject[]) { setObjects((all) => [...items, ...all.map((existing) => { const links = items.filter((item) => item.relatedIds.includes(existing.id)).map((item) => item.id); return links.length ? { ...existing, relatedIds: [...new Set([...existing.relatedIds, ...links])] } : existing; })]); }
   function addObject(item: LifeObject) { addObjects([item]); }
@@ -168,7 +186,7 @@ export default function App() {
                 <div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-blue-300 md:hidden">LifeOS</p><h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl">{pageTitle}</h1></div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <button onClick={exportWorkspace} aria-label="Download backup" title="Download a backup of this browser workspace" className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><Download size={17}/></button><button onClick={() => go('search')} aria-label="Search" className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><Search size={18}/></button>
+                <input ref={backupInputRef} type="file" accept="application/json,.json" onChange={importWorkspace} className="hidden"/><button onClick={()=>backupInputRef.current?.click()} aria-label="Restore backup" title="Restore a LifeOS backup" className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><Upload size={17}/></button><button onClick={exportWorkspace} aria-label="Download backup" title="Download a backup of this browser workspace" className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><Download size={17}/></button><button onClick={() => go('search')} aria-label="Search" className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><Search size={18}/></button>
                 <button onClick={openCapture} aria-label="Capture" className="grid h-10 w-10 place-items-center rounded-xl bg-amber-400 text-slate-950 shadow-[0_0_22px_rgba(251,191,36,.2)]"><Plus size={21}/></button>
               </div>
             </div>
