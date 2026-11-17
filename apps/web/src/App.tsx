@@ -2,17 +2,20 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent,
 import {
   Activity, ArrowLeft, ArrowRight, Bell, CalendarDays, Check, ChevronRight,
   CircleDot, Clock3, Home, Plus, Search, Sparkles, UserRound, Car, X,
-  AlertTriangle, Link2, Inbox, Hourglass, CheckCircle2, SlidersHorizontal, Download, Upload,
+  AlertTriangle, Link2, Inbox, Hourglass, CheckCircle2, SlidersHorizontal, Download, Upload, LogOut,
 } from 'lucide-react';
 import { resolveLifeLoad, type LifeObject, type LifeObjectType, type LoopPriority, type LoopStatus } from '@lifeos/domain';
+import AuthGate from './AuthGate';
+import { authClient } from './auth';
 
 type Screen = 'home' | 'loops' | 'timeline' | 'search' | { detailId: string };
 type CaptureKind = 'auto' | LifeObjectType;
 const STORAGE_KEY = 'lifeos.v3.workspace.v1';
+const storageKey = (userId: string) => `${STORAGE_KEY}:${encodeURIComponent(userId)}`;
 
-function readWorkspace(): LifeObject[] {
+function readWorkspace(userId: string): LifeObject[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(userId));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     const demoIds = new Set(['asset-subaru','asset-home','person-family','person-contractor','event-oil','event-dinner','event-service-window','loop-quote','loop-registration','loop-bloodwork']);
@@ -27,7 +30,11 @@ const kindLabel: Record<LifeObjectType, string> = { event: 'Event', loop: 'Open 
 const priorityColor: Record<LoopPriority, string> = { low: '#64748b', normal: '#94a3b8', high: '#f59e0b', urgent: '#fb7185' };
 
 export default function App() {
-  const [objects, setObjects] = useState<LifeObject[]>(readWorkspace);
+  return <AuthGate>{(user) => <Workspace key={user.id} userId={user.id} email={user.email} />}</AuthGate>;
+}
+
+function Workspace({ userId, email }: { userId: string; email: string }) {
+  const [objects, setObjects] = useState<LifeObject[]>(() => readWorkspace(userId));
   const [screenStack, setScreenStack] = useState<Screen[]>(['home']);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [captureText, setCaptureText] = useState('');
@@ -59,7 +66,7 @@ export default function App() {
     return q && [item.title, item.notes ?? '', item.assetType ?? '', item.personType ?? '', ...(item.areas ?? [])].join(' ').toLocaleLowerCase().includes(q);
   });
 
-  useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(objects)); } catch { /* session remains usable */ } }, [objects]);
+  useEffect(() => { try { localStorage.setItem(storageKey(userId), JSON.stringify(objects)); } catch { /* session remains usable */ } }, [objects, userId]);
   useEffect(() => { setEditTitle(activeDetail?.title ?? ''); setEditNotes(activeDetail?.notes ?? ''); setEditing(false); setLinkTargetId(''); setAreaDraft(''); }, [activeDetail?.id]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -187,6 +194,7 @@ export default function App() {
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <input ref={backupInputRef} type="file" accept="application/json,.json" onChange={importWorkspace} className="hidden"/><button onClick={()=>backupInputRef.current?.click()} aria-label="Restore backup" title="Restore a LifeOS backup" className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><Upload size={17}/></button><button onClick={exportWorkspace} aria-label="Download backup" title="Download a backup of this browser workspace" className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><Download size={17}/></button><button onClick={() => go('search')} aria-label="Search" className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><Search size={18}/></button>
+                <button onClick={()=>{void authClient.signOut();}} aria-label={`Sign out ${email}`} title={`Signed in as ${email} · Sign out`} className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><LogOut size={17}/></button>
                 <button onClick={openCapture} aria-label="Capture" className="grid h-10 w-10 place-items-center rounded-xl bg-amber-400 text-slate-950 shadow-[0_0_22px_rgba(251,191,36,.2)]"><Plus size={21}/></button>
               </div>
             </div>
