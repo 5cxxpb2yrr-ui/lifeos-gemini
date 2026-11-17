@@ -5,11 +5,10 @@ LifeOS is an event-driven personal operating system. Mission Control is a projec
 ## Architecture
 
 - **Web:** React + TypeScript + Vite + Tailwind + Zustand
-- **API:** Node.js HTTP service (native runtime; no framework overhead)
 - **Identity:** Neon Managed Better Auth (email/password)
 - **Event API:** Node.js HTTP service with an append-only SurrealDB event history and rebuildable projections
 - **Workspace:** browser-local and scoped to the signed-in Neon user; cloud sync is not connected yet
-- **Workspace:** pnpm + Turborepo
+- **Tooling:** pnpm + Turborepo
 
 The canonical record types are Event, Open Loop, Person, and Asset. Areas describe the parts of life those records belong to (for example Health, Home, Work, and Relationships). Sign in with Neon Auth; each account gets a separate browser-local workspace. Export a backup and use Restore to recover it before clearing browser data. The current UI is **not yet synced to the event API or across devices**. Commands in the API append immutable events; deterministic projectors rebuild current state. The UI must not become a second source of truth.
 
