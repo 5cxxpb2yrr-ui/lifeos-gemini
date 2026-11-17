@@ -9,6 +9,7 @@ import { resolveLifeLoad, type LifeObject, type LifeObjectType, type LoopPriorit
 type Screen = 'home' | 'loops' | 'timeline' | 'search' | { detailId: string };
 type CaptureKind = 'auto' | LifeObjectType;
 const STORAGE_KEY = 'lifeos.v3.workspace.v1';
+let workspaceReadError: string | null = null;
 
 function readWorkspace(): LifeObject[] {
   try {
@@ -21,10 +22,16 @@ function readWorkspace(): LifeObject[] {
       }
     }
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) throw new Error('Saved workspace data is not a record list.');
     const demoIds = new Set(['asset-subaru','asset-home','person-family','person-contractor','event-oil','event-dinner','event-service-window','loop-quote','loop-registration','loop-bloodwork']);
-    return Array.isArray(parsed) ? parsed.filter((item) => item && typeof item.id === 'string' && !demoIds.has(item.id) && ['event', 'loop', 'person', 'asset'].includes(item.type)).map((item) => ({ ...item, areas: item.areas ?? item.streams ?? [], relatedIds: (item.relatedIds ?? []).filter((id: string) => !demoIds.has(id)) })) : [];
-  } catch { return []; }
+    const valid = parsed.filter((item) => item && typeof item.id === 'string' && typeof item.title === 'string' && ['event', 'loop', 'person', 'asset'].includes(item.type));
+    if (valid.length !== parsed.length) throw new Error('Saved workspace contains records that could not be read safely.');
+    return valid.filter((item) => !demoIds.has(item.id)).map((item) => ({ ...item, areas: item.areas ?? item.streams ?? [], relatedIds: (Array.isArray(item.relatedIds) ? item.relatedIds : []).filter((relatedId: string) => !demoIds.has(relatedId)) }));
+  } catch (error) {
+    workspaceReadError = error instanceof Error ? error.message : 'Saved workspace could not be read.';
+    return [];
+  }
 }
 const fmt = (value?: string | null) => value ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', ...(new Date(value).getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) }).format(new Date(value)) : 'No date';
 const fmtTime = (value?: string) => value ? new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value)) : 'Date not set';
@@ -39,6 +46,7 @@ export default function App() {
 
 function Workspace() {
   const [objects, setObjects] = useState<LifeObject[]>(() => readWorkspace());
+  const [storageStatus, setStorageStatus] = useState<'saved' | 'error'>(() => workspaceReadError ? 'error' : 'saved');
   const [screenStack, setScreenStack] = useState<Screen[]>(['home']);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [captureText, setCaptureText] = useState('');
@@ -70,7 +78,16 @@ function Workspace() {
     return q && [item.title, item.notes ?? '', item.assetType ?? '', item.personType ?? '', ...(item.areas ?? [])].join(' ').toLocaleLowerCase().includes(q);
   });
 
-  useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(objects)); } catch { /* browser storage may be unavailable */ } }, [objects]);
+  useEffect(() => {
+    // Never replace unreadable data with an empty workspace. Let the user restore a backup first.
+    if (workspaceReadError) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(objects));
+      setStorageStatus('saved');
+    } catch {
+      setStorageStatus('error');
+    }
+  }, [objects]);
   useEffect(() => { setEditTitle(activeDetail?.title ?? ''); setEditNotes(activeDetail?.notes ?? ''); setEditing(false); setLinkTargetId(''); setAreaDraft(''); }, [activeDetail?.id]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -103,7 +120,10 @@ function Workspace() {
       const parsed = JSON.parse(await file.text());
       const imported = Array.isArray(parsed) ? parsed : parsed.objects;
       if (!Array.isArray(imported) || imported.some((item) => !item || typeof item.id !== 'string' || typeof item.title !== 'string' || !['event','loop','person','asset'].includes(item.type))) throw new Error('This is not a valid LifeOS backup.');
+      if (!Array.isArray(parsed) && parsed.schemaVersion != null && parsed.schemaVersion > 1) throw new Error('This backup was created by a newer LifeOS version. Update LifeOS before restoring it.');
       if (!window.confirm('Replace the records in this browser with the records from this backup?')) return;
+      workspaceReadError = null;
+      setStorageStatus('saved');
       setObjects(imported.map((item) => ({ ...item, areas: item.areas ?? item.streams ?? [], relatedIds: Array.isArray(item.relatedIds) ? item.relatedIds : [] })));
       setScreenStack(['home']);
       setCaptureOpen(false);
@@ -197,6 +217,7 @@ function Workspace() {
                 <div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-blue-300 md:hidden">LifeOS</p><h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl">{pageTitle}</h1></div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                <span role="status" title={storageStatus === 'saved' ? 'Workspace saved in this browser' : (workspaceReadError ?? 'Could not save to browser storage')} className={`hidden text-[10px] font-medium sm:block ${storageStatus === 'saved' ? 'text-emerald-300' : 'text-amber-300'}`}>{storageStatus === 'saved' ? 'Saved locally' : 'Storage issue'}</span>
                 <input ref={backupInputRef} type="file" accept="application/json,.json" onChange={importWorkspace} className="hidden"/><button onClick={()=>backupInputRef.current?.click()} aria-label="Restore backup" title="Restore a LifeOS backup" className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><Upload size={17}/></button><button onClick={exportWorkspace} aria-label="Download backup" title="Download a backup of this browser workspace" className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><Download size={17}/></button><button onClick={() => go('search')} aria-label="Search" className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><Search size={18}/></button>
                 <button onClick={openCapture} aria-label="Capture" className="grid h-10 w-10 place-items-center rounded-xl bg-amber-400 text-slate-950 shadow-[0_0_22px_rgba(251,191,36,.2)]"><Plus size={21}/></button>
               </div>
