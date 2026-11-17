@@ -9,7 +9,11 @@ LifeOS is an event-driven personal operating system. Mission Control is a projec
 - **Database:** SurrealDB, with an append-only event history and rebuildable projections
 - **Workspace:** pnpm + Turborepo
 
-The canonical record types are Event, Open Loop, Person, and Asset. Commands append immutable events; deterministic projectors rebuild current state. The UI must not become a second source of truth.
+The canonical record types are Event, Open Loop, Person, and Asset. Areas describe the parts of life those records belong to (for example Health, Home, Work, and Relationships). Commands append immutable events; deterministic projectors rebuild current state. The UI must not become a second source of truth.
+
+## Product ethos
+
+LifeOS should be simpler, more natural, and easier to navigate. Use familiar language, keep the primary interface focused, and avoid creating separate workspaces for concepts that can be connected to the same records. Every feature must reduce the effort of managing life; otherwise, question whether it belongs.
 
 ## Run the API locally
 
