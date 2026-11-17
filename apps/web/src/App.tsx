@@ -186,7 +186,7 @@ export default function App() {
                   {dueSoon.length ? dueSoon.slice(0,4).map(item=><ObjectRow key={item.id} item={item} onClick={()=>push({detailId:item.id})} meta={fmt(item.dueAt)}/>) : <Empty text="No upcoming commitments due in the next seven days."/>}
                 </Panel>
                 <Panel title="Waiting on others" icon={<Hourglass size={16}/>} action="View all" onAction={()=>go('loops')}>
-                  {waiting.length ? waiting.slice(0,4).map(item=><ObjectRow key={item.id} item={item} onClick={()=>push({detailId:item.id})} meta={item.waitingOn ? `Waiting on ${item.waitingOn}` : 'Waiting'}/>) : <Empty text="Nothing is currently need(?: to)?\\b|needs to|should|must|remind me|follow up|schedule|renew|call|send|check|book|pay|replace|waiting on someone else."/>}
+                  {waiting.length ? waiting.slice(0,4).map(item=><ObjectRow key={item.id} item={item} onClick={()=>push({detailId:item.id})} meta={item.waitingOn ? `Waiting on ${item.waitingOn}` : 'Waiting'}/>) : <Empty text="Nothing is currently waiting on someone else."/>}
                 </Panel>
                 <Panel title="Relationship attention" icon={<UserRound size={16}/>} action="Find people" onAction={()=>go('search')}>
                   {objects.filter(x=>x.type==='person').slice(0,3).map(item=><ObjectRow key={item.id} item={item} onClick={()=>push({detailId:item.id})} meta={item.personType ?? 'Person'}/>)}
