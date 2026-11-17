@@ -45,6 +45,14 @@ export class SurrealStore {
     return result;
   }
 
+  async ensureSchema() {
+    await this.query([
+      'DEFINE TABLE IF NOT EXISTS life_event SCHEMALESS;',
+      'DEFINE INDEX IF NOT EXISTS life_event_occurred_at ON TABLE life_event FIELDS occurredAt;',
+      'DEFINE INDEX IF NOT EXISTS life_event_type ON TABLE life_event FIELDS eventType;',
+    ].join('\n'));
+  }
+
   async ping() {
     await this.query('RETURN true;');
     return true;
@@ -54,7 +62,7 @@ export class SurrealStore {
     const eventId = `evt_${randomUUID().replaceAll('-', '')}`;
     const event = { eventId, eventType, occurredAt, payload };
     // IDs are generated here and all values are serialized as JSON literals.
-    // Event records are CREATE-only: the canonical history is never overwritten.
+    // Event records are CREATE-only: canonical history is never overwritten.
     await this.query(`CREATE life_event:${eventId} CONTENT ${JSON.stringify(event)};`);
     return event;
   }
