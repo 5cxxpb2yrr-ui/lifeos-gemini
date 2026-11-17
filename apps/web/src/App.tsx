@@ -94,7 +94,7 @@ export default function App() {
     } else if (captureKind === 'auto') {
       const sentences = text.split(/(?<=[.!?])\s+/);
       const eventPart = sentences.find((part) => /\b(had|changed|paid|finished|completed|met|went|bought|visited|worked out|replaced|installed|attended)\b/i.test(part));
-      const loopPart = sentences.find((part) => /\b(need to|needs to|should|must|remind me|follow up|schedule|renew|call|send|check|book|pay|replace|need(?: to)?\\b|needs to|should|must|remind me|follow up|schedule|renew|call|send|check|book|pay|replace|waiting on)\b/i.test(part));
+      const loopPart = sentences.find((part) => /\\b(need(?: to)?|needs to|should|must|remind me|follow up|schedule|renew|call|send|check|book|pay|replace|waiting on)\\b/i.test(part));
       if (eventPart) addObject({ ...common, id: id(), title: eventPart.replace(/[.!?]+$/, ''), type: 'event', occurredAt: timestamp });
       if (loopPart) addObject({ ...common, id: id(), title: loopPart.replace(/[.!?]+$/, ''), type: 'loop', status: /need(?: to)?\\b|needs to|should|must|remind me|follow up|schedule|renew|call|send|check|book|pay|replace|waiting on/i.test(loopPart) ? 'waiting' : 'open', priority: 'normal' });
       if (!eventPart && !loopPart) addObject({ ...common, type: 'event', occurredAt: timestamp });
