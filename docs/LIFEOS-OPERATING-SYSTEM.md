@@ -2,13 +2,13 @@
 
 ## Architectural correction
 
-The Mission Control UI is a projection of the operating system, not the system itself. Canonical history lives in an append-only SurrealDB event store. Current state is derived by replaying events through deterministic projectors. The UI must never become a second source of truth.
+The Mission Control UI is a projection of the operating system, not the system itself. Canonical history lives in an append-only SurrealDB event store. Current state is derived by replaying events through deterministic projectors. The UI must never become a second source of truth. The current web preview is local-first and stores its workspace in browser storage; it is not yet connected to the SurrealDB API.
 
 ## Canonical flow
 
 `Capture / Command → Immutable Event → Projection → Resolver → Recommendation → User Action → Outcome Event`
 
-The first implementation keeps the canonical record types to Event, Open Loop, Person, and Asset. Relationships are explicit and symmetric. **Areas** describe ongoing parts of life (such as Health, Finances, Relationships, Work, and Home) and connect the same records; they do not become separate mini-applications. Goals, decisions, finance details, and notes can be represented as linked records or supporting data without expanding primary navigation.
+The first implementation keeps the canonical record types to Event, Open Loop, Person, and Asset. Areas are editable classifications attached to these records, not separate workspaces. Relationships are explicit and symmetric. **Areas** describe ongoing parts of life (such as Health, Finances, Relationships, Work, and Home) and connect the same records; they do not become separate mini-applications. Goals, decisions, finance details, and notes can be represented as linked records or supporting data without expanding primary navigation.
 
 ## Product ethos
 
