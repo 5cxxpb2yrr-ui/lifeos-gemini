@@ -2,20 +2,24 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent,
 import {
   Activity, ArrowLeft, ArrowRight, Bell, CalendarDays, Check, ChevronRight,
   CircleDot, Clock3, Home, Plus, Search, Sparkles, UserRound, Car, X,
-  AlertTriangle, Link2, Inbox, Hourglass, CheckCircle2, SlidersHorizontal, Download, Upload, LogOut,
+  AlertTriangle, Link2, Inbox, Hourglass, CheckCircle2, SlidersHorizontal, Download, Upload,
 } from 'lucide-react';
 import { resolveLifeLoad, type LifeObject, type LifeObjectType, type LoopPriority, type LoopStatus } from '@lifeos/domain';
-import AuthGate from './AuthGate';
-import { authClient } from './auth';
 
 type Screen = 'home' | 'loops' | 'timeline' | 'search' | { detailId: string };
 type CaptureKind = 'auto' | LifeObjectType;
 const STORAGE_KEY = 'lifeos.v3.workspace.v1';
-const storageKey = (userId: string) => `${STORAGE_KEY}:${encodeURIComponent(userId)}`;
 
-function readWorkspace(userId: string): LifeObject[] {
+function readWorkspace(): LifeObject[] {
   try {
-    const raw = localStorage.getItem(storageKey(userId));
+    let raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      const legacyKeys = Object.keys(localStorage).filter((key) => key.startsWith(`${STORAGE_KEY}:`));
+      if (legacyKeys.length === 1) {
+        raw = localStorage.getItem(legacyKeys[0]);
+        if (raw) localStorage.setItem(STORAGE_KEY, raw);
+      }
+    }
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     const demoIds = new Set(['asset-subaru','asset-home','person-family','person-contractor','event-oil','event-dinner','event-service-window','loop-quote','loop-registration','loop-bloodwork']);
@@ -30,11 +34,11 @@ const kindLabel: Record<LifeObjectType, string> = { event: 'Event', loop: 'Open 
 const priorityColor: Record<LoopPriority, string> = { low: '#64748b', normal: '#94a3b8', high: '#f59e0b', urgent: '#fb7185' };
 
 export default function App() {
-  return <AuthGate>{(user) => <Workspace key={user.id} userId={user.id} email={user.email} />}</AuthGate>;
+  return <Workspace />;
 }
 
-function Workspace({ userId, email }: { userId: string; email: string }) {
-  const [objects, setObjects] = useState<LifeObject[]>(() => readWorkspace(userId));
+function Workspace() {
+  const [objects, setObjects] = useState<LifeObject[]>(() => readWorkspace());
   const [screenStack, setScreenStack] = useState<Screen[]>(['home']);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [captureText, setCaptureText] = useState('');
@@ -66,7 +70,7 @@ function Workspace({ userId, email }: { userId: string; email: string }) {
     return q && [item.title, item.notes ?? '', item.assetType ?? '', item.personType ?? '', ...(item.areas ?? [])].join(' ').toLocaleLowerCase().includes(q);
   });
 
-  useEffect(() => { try { localStorage.setItem(storageKey(userId), JSON.stringify(objects)); } catch { /* session remains usable */ } }, [objects, userId]);
+  useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(objects)); } catch { /* browser storage may be unavailable */ } }, [objects]);
   useEffect(() => { setEditTitle(activeDetail?.title ?? ''); setEditNotes(activeDetail?.notes ?? ''); setEditing(false); setLinkTargetId(''); setAreaDraft(''); }, [activeDetail?.id]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -194,7 +198,6 @@ function Workspace({ userId, email }: { userId: string; email: string }) {
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <input ref={backupInputRef} type="file" accept="application/json,.json" onChange={importWorkspace} className="hidden"/><button onClick={()=>backupInputRef.current?.click()} aria-label="Restore backup" title="Restore a LifeOS backup" className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><Upload size={17}/></button><button onClick={exportWorkspace} aria-label="Download backup" title="Download a backup of this browser workspace" className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><Download size={17}/></button><button onClick={() => go('search')} aria-label="Search" className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><Search size={18}/></button>
-                <button onClick={()=>{void authClient.signOut();}} aria-label={`Sign out ${email}`} title={`Signed in as ${email} · Sign out`} className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><LogOut size={17}/></button>
                 <button onClick={openCapture} aria-label="Capture" className="grid h-10 w-10 place-items-center rounded-xl bg-amber-400 text-slate-950 shadow-[0_0_22px_rgba(251,191,36,.2)]"><Plus size={21}/></button>
               </div>
             </div>
@@ -248,7 +251,7 @@ function Workspace({ userId, email }: { userId: string; email: string }) {
 
             {current === 'timeline' && <section><div className="mb-5"><p className="text-sm text-slate-400">A connected record of what happened.</p><p className="mt-1 text-xs text-slate-500">Events and completed commitments · newest first</p></div><div className="relative ml-3 border-l border-white/10 pl-6">{[...events].sort((a,b)=>Date.parse(b.occurredAt??b.createdAt)-Date.parse(a.occurredAt??a.createdAt)).map(item=><div key={item.id} className="relative mb-4"><span className="absolute -left-[31px] top-4 h-2.5 w-2.5 rounded-full border-2 border-blue-300 bg-[#080d16]"/><button onClick={()=>push({detailId:item.id})} className="w-full rounded-2xl border border-white/[.08] bg-white/[.025] p-4 text-left hover:border-blue-400/30"><p className="text-[11px] font-semibold uppercase tracking-wider text-blue-300">{fmtTime(item.occurredAt??item.createdAt)}</p><p className="mt-1 font-semibold">{item.title}</p><p className="mt-1 text-xs text-slate-500">{(item.areas??[]).join(' · ') || 'Life event'} · {related(item).map(x=>x.title).join(', ') || 'No linked context'}</p></button></div>)}{events.length===0&&<Empty text="Your timeline will grow as meaningful events happen."/>}</div></section>}
 
-            {current === 'search' && <section><div className="relative mb-5"><Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"/><input autoFocus value={searchText} onChange={e=>setSearchText(e.target.value)} placeholder="Search events, loops, people, assets…" className="min-h-14 w-full rounded-2xl border border-white/10 bg-white/[.04] pl-12 pr-4 text-base outline-none focus:border-blue-400/60"/></div>{searchText.trim()?<><p className="mb-3 text-xs text-slate-500">{matches.length} result{matches.length===1?'':'s'} across your LifeOS</p><div className="space-y-2">{matches.map(item=><ObjectRow key={item.id} item={item} onClick={()=>push({detailId:item.id})} meta={kindLabel[item.type]}/>)}</div>{matches.length===0&&<Empty text="No matches. Try another name, event, asset, or phrase."/>}</>:<div className="rounded-2xl border border-white/[.07] p-5"><p className="font-semibold">Search your connected context</p><p className="mt-1 text-sm text-slate-400">Find people, assets, events, and unresolved commitments in one place.</p><div className="mt-4 flex flex-wrap gap-2">{['Vehicle','Family','maintenance','follow up'].map(term=><button key={term} onClick={()=>setSearchText(term)} className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-slate-400">{term}</button>)}</div></div>}</section>}
+            {current === 'search' && <section><div className="relative mb-5"><Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"/><input autoFocus value={searchText} onChange={e=>setSearchText(e.target.value)} placeholder="Search events, loops, people, assets…" className="min-h-14 w-full rounded-2xl border border-white/10 bg-white/[.04] pl-12 pr-4 text-base outline-none focus:border-blue-400/60"/></div>{searchText.trim()?<><p className="mb-3 text-xs text-slate-500">{matches.length} result{matches.length===1?'':'s'} across your LifeOS</p><div className="space-y-2">{matches.map(item=><ObjectRow key={item.id} item={item} onClick={()=>push({detailId:item.id})} meta={kindLabel[item.type]}/>)}</div>{matches.length===0&&<Empty text="No matches. Try another name, event, asset, or phrase."/>}</>:<div className="rounded-2xl border border-white/[.07] p-5"><p className="font-semibold">Search your LifeOS</p><p className="mt-1 text-sm text-slate-400">Find people, assets, events, and unresolved commitments in one place.</p><div className="mt-4 flex flex-wrap gap-2">{['Vehicle','Family','maintenance','follow up'].map(term=><button key={term} onClick={()=>setSearchText(term)} className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-slate-400">{term}</button>)}</div></div>}</section>}
 
             {typeof current === 'object' && activeDetail && <section className="space-y-4">
               <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 to-[#0b1320] p-5 sm:p-7"><div className="mb-4 flex items-center justify-between gap-3"><div className="flex flex-wrap items-center gap-2"><span className="rounded-lg bg-blue-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-200">{kindLabel[activeDetail.type]}</span>{activeDetail.type==='loop'&&<span className="rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase" style={{background:(priorityColor[activeDetail.priority??'normal'])+'20',color:priorityColor[activeDetail.priority??'normal']}}>{activeDetail.priority??'normal'} priority</span>}</div><button onClick={()=>setEditing((value)=>!value)} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-300">{editing?'Cancel':'Edit'}</button></div>{editing?<div className="space-y-3"><label className="block text-xs text-slate-500">Title<input value={editTitle} onChange={e=>setEditTitle(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-white/10 bg-black/25 px-3 text-base text-white outline-none focus:border-blue-400/60"/></label><label className="block text-xs text-slate-500">Notes<textarea value={editNotes} onChange={e=>setEditNotes(e.target.value)} rows={4} className="mt-1 w-full rounded-xl border border-white/10 bg-black/25 p-3 text-sm text-white outline-none focus:border-blue-400/60"/></label><button onClick={saveDetails} disabled={!editTitle.trim()} className="rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950 disabled:opacity-40">Save changes</button></div>:<><h2 className="text-2xl font-bold sm:text-3xl">{activeDetail.title}</h2><p className="mt-2 text-sm text-slate-400">Created {fmtTime(activeDetail.createdAt)}</p></>}
