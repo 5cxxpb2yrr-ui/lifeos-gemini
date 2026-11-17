@@ -1,180 +1,228 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { filterEntries, readEntries, writeEntries, STORAGE_KEY } from './entry-utils.mjs';
-import { Activity, Archive, Check, Circle, Clock3, Plus, Search, Sparkles } from 'lucide-react';
-import type { Recommendation } from '@lifeos/domain';
-import { NextBestActionCard } from './components/NextBestActionCard';
-import { OpenLoopsDashboard } from './components/OpenLoopsDashboard';
+import {
+  Activity, ArrowLeft, ArrowRight, Bell, CalendarDays, Check, ChevronRight,
+  CircleDot, Clock3, Home, Plus, Search, Sparkles, UserRound, Car, X,
+  AlertTriangle, Link2, Inbox, Hourglass, CheckCircle2, SlidersHorizontal,
+} from 'lucide-react';
+import { resolveLifeLoad, type LifeObject, type LifeObjectType, type LoopPriority, type LoopStatus } from '@lifeos/domain';
 
-type EntryType = 'task' | 'question' | 'follow-up' | 'idea' | 'event';
-type Entry = {
-  id: string;
-  title: string;
-  type: EntryType;
-  createdAt: string;
-  completedAt: string | null;
-};
+type Screen = 'home' | 'loops' | 'timeline' | 'search' | { detailId: string };
+type CaptureKind = 'auto' | LifeObjectType;
+const STORAGE_KEY = 'lifeos.v3.workspace.v1';
 
-const nba: Recommendation = {
-  id: 'rec-1',
-  entityId: 'property-1',
-  title: 'Contact Georgia Power',
-  category: 'execute_now',
-  recommendation: 'regarding service transfer.',
-  whyThisMatters: 'Your move date is in 6 days. No transfer request is currently open.',
-  expectedOutcome: 'Prevent utility interruption for your upcoming move and avoid late fees.',
-  impactScore: 92,
-  confidenceScore: 88,
-  urgencyScore: 90,
-  actions: ['Call Now', 'Start Online'],
-};
-
-const entryTypes: { value: EntryType; label: string }[] = [
-  { value: 'task', label: 'Task' },
-  { value: 'question', label: 'Question' },
-  { value: 'follow-up', label: 'Follow-up' },
-  { value: 'idea', label: 'Idea' },
-  { value: 'event', label: 'Event' },
+const now = Date.now();
+const ago = (days: number) => new Date(now - days * 86400000).toISOString();
+const future = (days: number) => new Date(now + days * 86400000).toISOString();
+const seed: LifeObject[] = [
+  { id: 'asset-subaru', type: 'asset', title: '2019 Subaru Crosstrek Limited', assetType: 'Vehicle', createdAt: ago(180), updatedAt: ago(2), value: null, notes: '2.0L FB20D · Maintenance history and factory procedures.', streams: ['Vehicles'], relatedIds: ['event-oil'] },
+  { id: 'asset-home', type: 'asset', title: 'Home', assetType: 'Property', createdAt: ago(500), updatedAt: ago(12), notes: 'Home maintenance, utilities, and renewals.', streams: ['Home'], relatedIds: [] },
+  { id: 'person-family', type: 'person', title: 'Family', personType: 'Family', createdAt: ago(500), updatedAt: ago(5), notes: 'Keep relationships intentional.', streams: ['Family'], relatedIds: ['event-dinner'] },
+  { id: 'person-contractor', type: 'person', title: 'Contractor', personType: 'Service provider', createdAt: ago(40), updatedAt: ago(8), notes: 'Waiting on a quote for the home repair.', streams: ['Home'], relatedIds: ['loop-quote'] },
+  { id: 'event-oil', type: 'event', title: 'Changed engine oil and filter', occurredAt: ago(14), createdAt: ago(14), updatedAt: ago(14), notes: 'Service record · next interval 5,000 miles.', streams: ['Vehicles'], relatedIds: ['asset-subaru'] },
+  { id: 'event-dinner', type: 'event', title: 'Dinner with family', occurredAt: ago(2), createdAt: ago(2), updatedAt: ago(2), streams: ['Family'], relatedIds: ['person-family'] },
+  { id: 'loop-quote', type: 'loop', title: 'Follow up on contractor quote', status: 'waiting', priority: 'high', waitingOn: 'Contractor', createdAt: ago(8), updatedAt: ago(1), dueAt: future(1), streams: ['Home'], relatedIds: ['person-contractor', 'asset-home'] },
+  { id: 'loop-registration', type: 'loop', title: 'Renew vehicle registration', status: 'open', priority: 'urgent', risk: true, createdAt: ago(12), updatedAt: ago(1), dueAt: future(2), streams: ['Vehicles'], relatedIds: ['asset-subaru'] },
+  { id: 'loop-bloodwork', type: 'loop', title: 'Schedule follow-up blood work', status: 'active', priority: 'normal', createdAt: ago(3), updatedAt: ago(1), dueAt: future(5), streams: ['Health'], relatedIds: [] },
 ];
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value));
+function readWorkspace(): LifeObject[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return seed;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((item) => item && typeof item.id === 'string' && ['event', 'loop', 'person', 'asset'].includes(item.type)) : seed;
+  } catch { return seed; }
 }
+const fmt = (value?: string | null) => value ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', ...(new Date(value).getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) }).format(new Date(value)) : 'No date';
+const fmtTime = (value?: string) => value ? new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value)) : 'Date not set';
+const id = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const isOpen = (item: LifeObject) => item.type === 'loop' && item.status !== 'complete';
+const kindLabel: Record<LifeObjectType, string> = { event: 'Event', loop: 'Open Loop', person: 'Person', asset: 'Asset' };
+const priorityColor: Record<LoopPriority, string> = { low: '#64748b', normal: '#94a3b8', high: '#f59e0b', urgent: '#fb7185' };
 
 export default function App() {
-  const [entries, setEntries] = useState<Entry[]>(() => readEntries(window.localStorage));
-  const [title, setTitle] = useState('');
-  const [type, setType] = useState<EntryType>('task');
-  const [query, setQuery] = useState('');
-  const [showCompleted, setShowCompleted] = useState(false);
+  const [objects, setObjects] = useState<LifeObject[]>(readWorkspace);
+  const [screenStack, setScreenStack] = useState<Screen[]>(['home']);
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [captureText, setCaptureText] = useState('');
+  const [captureKind, setCaptureKind] = useState<CaptureKind>('auto');
+  const [relatedId, setRelatedId] = useState('');
+  const [searchText, setSearchText] = useState('');
+  const [loopFilter, setLoopFilter] = useState<'all' | LoopStatus>('all');
+  const [showLoadDetails, setShowLoadDetails] = useState(false);
+  const current = screenStack[screenStack.length - 1];
+  const activeDetail = typeof current === 'object' ? objects.find((item) => item.id === current.detailId) : undefined;
+  const load = useMemo(() => resolveLifeLoad(objects), [objects]);
+  const loops = useMemo(() => objects.filter(isOpen), [objects]);
+  const events = useMemo(() => objects.filter((item) => item.type === 'event').sort((a,b) => Date.parse(b.occurredAt ?? b.createdAt) - Date.parse(a.occurredAt ?? a.createdAt)), [objects]);
+  const waiting = loops.filter((item) => item.status === 'waiting' || item.waitingOn);
+  const attention = [...loops].sort((a,b) => (load.drivers.find(x=>x.id===b.id)?.points ?? 0) - (load.drivers.find(x=>x.id===a.id)?.points ?? 0)).slice(0,3);
+  const dueSoon = loops.filter((item) => item.dueAt && Date.parse(item.dueAt) <= Date.now() + 7*86400000).sort((a,b)=>Date.parse(a.dueAt!) - Date.parse(b.dueAt!));
+  const matches = objects.filter((item) => {
+    const q = searchText.trim().toLocaleLowerCase();
+    return q && [item.title, item.notes ?? '', item.assetType ?? '', item.personType ?? '', ...(item.streams ?? [])].join(' ').toLocaleLowerCase().includes(q);
+  });
 
+  useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(objects)); } catch { /* session remains usable */ } }, [objects]);
   useEffect(() => {
-    try {
-      writeEntries(window.localStorage, entries, STORAGE_KEY);
-    } catch {
-      // The app remains usable for this session if browser storage is unavailable.
-    }
-  }, [entries]);
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setScreenStack(['search']); }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'n') { event.preventDefault(); setCaptureOpen(true); }
+      if (event.key === 'Escape') { setCaptureOpen(false); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
-  const openEntries = useMemo(() => entries.filter((entry) => !entry.completedAt), [entries]);
-  const completedEntries = useMemo(() => entries.filter((entry) => entry.completedAt), [entries]);
-  const visibleEntries = useMemo(
-    () => filterEntries(entries, query, showCompleted),
-    [entries, query, showCompleted],
-  );
-
+  function push(screen: Screen) { setScreenStack((stack) => [...stack, screen]); }
+  function back() { setScreenStack((stack) => stack.length > 1 ? stack.slice(0,-1) : ['home']); }
+  function go(screen: Screen) { setScreenStack([screen]); }
+  function openCapture() { setCaptureText(''); setCaptureKind('auto'); setRelatedId(''); setCaptureOpen(true); }
+  function addObject(item: LifeObject) { setObjects((all) => [item, ...all]); }
   function capture(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const cleanTitle = title.trim();
-    if (!cleanTitle) return;
-    const now = new Date().toISOString();
-    setEntries((current) => [{ id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`, title: cleanTitle, type, createdAt: now, completedAt: null }, ...current]);
-    setTitle('');
+    const text = captureText.trim();
+    if (!text) return;
+    const timestamp = new Date().toISOString();
+    const common = { id: id(), title: text, createdAt: timestamp, updatedAt: timestamp, relatedIds: relatedId ? [relatedId] : [], streams: [] as string[] };
+    if (captureKind === 'person' || captureKind === 'asset') {
+      addObject({ ...common, type: captureKind, ...(captureKind === 'person' ? { personType: 'Person' } : { assetType: 'Asset' }) });
+    } else if (captureKind === 'event') {
+      addObject({ ...common, type: 'event', occurredAt: timestamp });
+    } else if (captureKind === 'loop') {
+      addObject({ ...common, type: 'loop', status: 'open', priority: 'normal' });
+    } else if (captureKind === 'auto') {
+      const sentences = text.split(/(?<=[.!?])\s+/);
+      const eventPart = sentences.find((part) => /\b(had|changed|paid|finished|completed|met|went|bought|visited|worked out|replaced|installed|attended)\b/i.test(part));
+      const loopPart = sentences.find((part) => /\b(need to|needs to|should|must|remind me|follow up|schedule|renew|call|send|check|book|pay|replace|waiting on)\b/i.test(part));
+      if (eventPart) addObject({ ...common, id: id(), title: eventPart.replace(/[.!?]+$/, ''), type: 'event', occurredAt: timestamp });
+      if (loopPart) addObject({ ...common, id: id(), title: loopPart.replace(/[.!?]+$/, ''), type: 'loop', status: /waiting on/i.test(loopPart) ? 'waiting' : 'open', priority: 'normal' });
+      if (!eventPart && !loopPart) addObject({ ...common, type: 'event', occurredAt: timestamp });
+      if (eventPart && loopPart) setObjects((all) => all.map((item) => item.createdAt === timestamp && item.title === eventPart.replace(/[.!?]+$/, '') ? { ...item, relatedIds: [...item.relatedIds, ...all.filter((x) => x.createdAt === timestamp && x.type === 'loop').map((x) => x.id)] } : item));
+    }
+    setCaptureOpen(false);
+    setCaptureText('');
   }
-
-  function completeEntry(id: string) {
-    setEntries((current) => current.map((entry) => entry.id === id ? { ...entry, completedAt: new Date().toISOString() } : entry));
+  function completeLoop(item: LifeObject) {
+    const timestamp = new Date().toISOString();
+    const completion: LifeObject = { id: id(), type: 'event', title: `Closed loop: ${item.title}`, occurredAt: timestamp, createdAt: timestamp, updatedAt: timestamp, relatedIds: [item.id, ...item.relatedIds], streams: item.streams ?? [] };
+    setObjects((all) => all.map((x) => x.id === item.id ? { ...x, status: 'complete', updatedAt: timestamp } : x).concat(completion));
   }
-
-  function reopenEntry(id: string) {
-    setEntries((current) => current.map((entry) => entry.id === id ? { ...entry, completedAt: null } : entry));
+  function setLoopStatus(item: LifeObject, status: LoopStatus) {
+    setObjects((all) => all.map((x) => x.id === item.id ? { ...x, status, updatedAt: new Date().toISOString() } : x));
   }
+  function related(item: LifeObject) { return objects.filter((candidate) => candidate.id !== item.id && item.relatedIds.includes(candidate.id)); }
 
-  const today = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date());
+  const loadTone = load.score <= 25 ? '#55d6a0' : load.score <= 75 ? '#60a5fa' : load.score <= 125 ? '#fbbf24' : load.score <= 175 ? '#fb923c' : '#fb7185';
+  const pageTitle = current === 'home' ? 'Mission Control' : current === 'loops' ? 'Open Loops' : current === 'timeline' ? 'Timeline' : current === 'search' ? 'Search' : activeDetail?.title ?? 'Record';
 
   return (
-    <main className="min-h-screen px-4 pb-28 pt-[max(1.25rem,env(safe-area-inset-top))] text-slate-100 sm:px-6">
-      <div className="mx-auto max-w-2xl">
-        <header className="mb-7 flex items-start justify-between gap-3">
-          <div>
-            <p className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-amber-400"><Activity size={14} /> Personal operating system</p>
-            <h1 className="text-3xl font-black tracking-tight sm:text-4xl">LifeOS<span className="text-amber-400">.</span></h1>
-            <p className="mt-1 text-sm text-slate-400">Mission Control</p>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-right">
-            <p className="text-xs text-slate-400">Today</p>
-            <p className="text-sm font-semibold">{today}</p>
-          </div>
-        </header>
+    <div className="min-h-screen bg-[#080d16] text-slate-100">
+      <div className="mx-auto min-h-screen max-w-6xl pb-28 md:flex md:pb-8">
+        <aside className="hidden w-60 shrink-0 border-r border-white/[0.07] px-5 py-8 md:flex md:flex-col">
+          <button onClick={() => go('home')} className="mb-10 text-left"><span className="text-xs font-bold uppercase tracking-[.22em] text-blue-300">Personal OS</span><span className="mt-1 block text-2xl font-black">LifeOS<span className="text-amber-400">.</span></span></button>
+          <nav className="space-y-2">
+            {([['home','Mission Control',Home],['loops','Open Loops',CircleDot],['timeline','Timeline',CalendarDays],['search','Search',Search]] as const).map(([key,label,Icon]) => <button key={key} onClick={() => go(key)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${current === key ? 'bg-blue-500/15 text-blue-200' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><Icon size={17}/>{label}</button>)}
+          </nav>
+          <div className="mt-auto rounded-2xl border border-white/10 bg-white/[0.03] p-4"><p className="text-[10px] uppercase tracking-widest text-slate-500">Life Load</p><p className="mt-1 text-3xl font-bold tabular-nums" style={{color:loadTone}}>{load.score}</p><p className="text-xs text-slate-400">{load.band}</p></div>
+        </aside>
 
-        <NextBestActionCard recommendation={nba} onAction={(action) => console.log(action)} />
-        <OpenLoopsDashboard />
-
-        <section className="mb-5 rounded-3xl border border-amber-400/30 bg-gradient-to-br from-amber-400/[0.12] via-slate-900 to-slate-950 p-5 shadow-[0_0_38px_rgba(245,158,11,0.08)] sm:p-6">
-          <div className="mb-4 flex items-center gap-2">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-amber-400/15 text-amber-300"><Plus size={19} /></span>
-            <div>
-              <h2 className="font-bold">Universal Capture</h2>
-              <p className="text-xs text-slate-400">Get it out of your head. Organize it later.</p>
-            </div>
-          </div>
-          <form onSubmit={capture} className="space-y-3">
-            <label className="sr-only" htmlFor="capture-title">What do you want to capture?</label>
-            <input id="capture-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Add a task, question, idea, or follow-up…" maxLength={240} className="min-h-12 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-base text-white outline-none placeholder:text-slate-500 focus:border-amber-400/70 focus:ring-2 focus:ring-amber-400/15" />
-            <div className="flex gap-2">
-              <label className="sr-only" htmlFor="capture-type">Entry type</label>
-              <select id="capture-type" value={type} onChange={(event) => setType(event.target.value as EntryType)} className="min-h-12 min-w-0 flex-1 rounded-2xl border border-white/10 bg-slate-900 px-3 text-sm text-slate-200 outline-none focus:border-amber-400/70">
-                {entryTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-              </select>
-              <button type="submit" disabled={!title.trim()} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-amber-400 px-5 font-bold text-slate-950 transition hover:bg-amber-300 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"><Plus size={17} /> Capture</button>
-            </div>
-          </form>
-        </section>
-
-        <section className="mb-5 grid grid-cols-2 gap-3">
-          <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-            <p className="mb-2 flex items-center gap-2 text-xs text-slate-400"><Circle size={13} className="text-amber-400" /> Open loops</p>
-            <p className="text-3xl font-bold tabular-nums">{openEntries.length}</p>
-            <p className="mt-1 text-xs text-slate-500">Items needing attention</p>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-            <p className="mb-2 flex items-center gap-2 text-xs text-slate-400"><Check size={13} className="text-emerald-400" /> Completed</p>
-            <p className="text-3xl font-bold tabular-nums">{completedEntries.length}</p>
-            <p className="mt-1 text-xs text-slate-500">Closed loops</p>
-          </div>
-        </section>
-
-        <section className="overflow-hidden rounded-3xl border border-white/10 bg-slate-900/70">
-          <div className="border-b border-white/[0.08] p-4 sm:p-5">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-amber-400"><Sparkles size={13} /> Focus</p>
-                <h2 className="text-lg font-bold">{showCompleted ? 'Completed items' : 'Attention Queue'}</h2>
+        <div className="min-w-0 flex-1">
+          <header className="sticky top-0 z-20 border-b border-white/[0.07] bg-[#080d16]/90 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-xl sm:px-6 md:px-9 md:pt-7">
+            <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                {screenStack.length > 1 && <button onClick={back} aria-label="Go back" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/10 text-slate-300"><ArrowLeft size={18}/></button>}
+                <div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-blue-300 md:hidden">LifeOS</p><h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl">{pageTitle}</h1></div>
               </div>
-              <button type="button" onClick={() => setShowCompleted((value) => !value)} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/5">{showCompleted ? 'Show open' : `Completed · ${completedEntries.length}`}</button>
+              <div className="flex shrink-0 items-center gap-2">
+                <button onClick={() => go('search')} aria-label="Search" className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/5"><Search size={18}/></button>
+                <button onClick={openCapture} aria-label="Capture" className="grid h-10 w-10 place-items-center rounded-xl bg-amber-400 text-slate-950 shadow-[0_0_22px_rgba(251,191,36,.2)]"><Plus size={21}/></button>
+              </div>
             </div>
-            <div className="relative">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-              <label className="sr-only" htmlFor="entry-search">Search captured items</label>
-              <input id="entry-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search your items…" className="min-h-10 w-full rounded-xl border border-white/[0.08] bg-black/20 py-2 pl-9 pr-3 text-sm outline-none placeholder:text-slate-500 focus:border-amber-400/50" />
-            </div>
-          </div>
+          </header>
 
-          {visibleEntries.length === 0 ? (
-            <div className="px-6 py-10 text-center">
-              <span className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-white/[0.04] text-slate-500"><Archive size={21} /></span>
-              <h3 className="font-semibold">{query ? 'No matches found' : showCompleted ? 'Nothing completed yet' : 'Your queue is clear'}</h3>
-              <p className="mx-auto mt-1 max-w-xs text-sm text-slate-400">{query ? 'Try a different search term.' : showCompleted ? 'Items you complete will be saved here.' : 'Capture an open loop above when something needs your attention.'}</p>
-            </div>
-          ) : (
-            <ul className="divide-y divide-white/[0.06]">
-              {visibleEntries.map((entry) => (
-                <li key={entry.id} className="flex items-start gap-3 p-4 sm:p-5">
-                  <button type="button" aria-label={entry.completedAt ? `Reopen ${entry.title}` : `Complete ${entry.title}`} onClick={() => entry.completedAt ? reopenEntry(entry.id) : completeEntry(entry.id)} className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full border transition ${entry.completedAt ? 'border-emerald-400 bg-emerald-400 text-slate-950' : 'border-slate-600 text-transparent hover:border-amber-400 hover:text-amber-400'}`}>{entry.completedAt ? <Check size={14} /> : <Check size={14} />}</button>
-                  <div className="min-w-0 flex-1">
-                    <p className={`break-words text-sm font-semibold ${entry.completedAt ? 'text-slate-500 line-through' : 'text-slate-100'}`}>{entry.title}</p>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
-                      <span className="rounded-md bg-white/[0.05] px-1.5 py-0.5 capitalize">{entry.type}</span>
-                      <span className="flex items-center gap-1"><Clock3 size={11} /> {formatDate(entry.createdAt)}</span>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+          <main className="mx-auto max-w-4xl px-4 pb-8 pt-5 sm:px-6 md:px-9 md:pt-8">
+            {current === 'home' && <section className="space-y-5">
+              <div className="grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
+                <button onClick={() => setShowLoadDetails((v)=>!v)} className="rounded-3xl border p-5 text-left transition hover:border-white/20 sm:p-6" style={{borderColor:loadTone+'55',background:'linear-gradient(135deg,#111d2d,#0b1320)'}}>
+                  <div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-slate-400">Life Load Index</p><p className="mt-2 text-5xl font-black tabular-nums" style={{color:loadTone}}>{load.score}<span className="ml-2 text-sm font-semibold">{load.band}</span></p><p className="mt-2 text-xs text-slate-400">{load.openCount} unresolved commitments · tap to inspect drivers</p></div><div className="grid h-14 w-14 place-items-center rounded-2xl" style={{background:loadTone+'18',color:loadTone}}><Activity size={27}/></div></div>
+                  <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full transition-all" style={{width:`${Math.min(100,load.score/200*100)}%`,background:loadTone}}/></div>
+                  <div className="mt-2 flex justify-between text-[9px] uppercase tracking-wider text-slate-500"><span>Calm 0</span><span>Stable 26</span><span>Busy 76</span><span>Stressed 126</span><span>Critical 176+</span></div>
+                </button>
+                <div className="rounded-3xl border border-blue-400/20 bg-gradient-to-br from-blue-950/60 to-slate-950 p-5 sm:p-6">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-blue-300"><Sparkles size={14}/> Focus</div>
+                  <p className="mt-2 text-lg font-bold">Highest leverage next</p>
+                  {attention.length ? <div className="mt-3 space-y-2">{attention.map((item,i)=><button key={item.id} onClick={()=>push({detailId:item.id})} className="flex w-full items-center gap-3 rounded-xl border border-white/[.07] bg-black/20 p-3 text-left"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-blue-400/15 text-xs font-bold text-blue-200">{i+1}</span><span className="min-w-0 flex-1 truncate text-sm font-semibold">{item.title}</span><ChevronRight size={15} className="text-slate-500"/></button>)}</div> : <p className="mt-3 text-sm text-slate-400">Nothing competing for attention. Capture what matters as it happens.</p>}
+                </div>
+              </div>
 
-        <p className="mx-auto mt-5 max-w-md text-center text-[11px] leading-relaxed text-slate-500">Saved in this browser on this device. This is a local-first MVP, not yet synced to a LifeOS graph or account.</p>
+              {showLoadDetails && <div className="rounded-2xl border border-white/10 bg-white/[.03] p-4"><div className="mb-3 flex items-center justify-between"><h2 className="font-bold">What is driving Life Load?</h2><button onClick={()=>setShowLoadDetails(false)} aria-label="Close" className="text-slate-500"><X size={17}/></button></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{[['Open loops',load.openCount*5],['Age',load.agePoints],['Priority',load.priorityPoints],['Risk',load.riskPoints],['Waiting',load.waitingPoints]].map(([label,value])=><div key={label} className="rounded-xl bg-black/20 p-3"><p className="text-xl font-bold tabular-nums">{value}</p><p className="text-xs text-slate-500">{label} points</p></div>)}</div><div className="mt-3 space-y-2">{load.drivers.map((d)=><button key={d.id} onClick={()=>push({detailId:d.id})} className="flex w-full justify-between gap-3 text-left text-sm"><span className="truncate">{d.title}<span className="ml-2 text-xs text-slate-500">{d.reasons.join(' · ')}</span></span><b className="tabular-nums">{d.points}</b></button>)}</div></div>}
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <Panel title="Open Loops Due" icon={<Clock3 size={16}/>} action="View all" onAction={()=>go('loops')}>
+                  {dueSoon.length ? dueSoon.slice(0,4).map(item=><ObjectRow key={item.id} item={item} onClick={()=>push({detailId:item.id})} meta={fmt(item.dueAt)}/>) : <Empty text="No upcoming commitments due in the next seven days."/>}
+                </Panel>
+                <Panel title="Waiting on others" icon={<Hourglass size={16}/>} action="View all" onAction={()=>go('loops')}>
+                  {waiting.length ? waiting.slice(0,4).map(item=><ObjectRow key={item.id} item={item} onClick={()=>push({detailId:item.id})} meta={item.waitingOn ? `Waiting on ${item.waitingOn}` : 'Waiting'}/>) : <Empty text="Nothing is currently waiting on someone else."/>}
+                </Panel>
+                <Panel title="Relationship attention" icon={<UserRound size={16}/>} action="Find people" onAction={()=>go('search')}>
+                  {objects.filter(x=>x.type==='person').slice(0,3).map(item=><ObjectRow key={item.id} item={item} onClick={()=>push({detailId:item.id})} meta={item.personType ?? 'Person'}/>)}
+                  {!objects.some(x=>x.type==='person')&&<Empty text="People you connect to events and commitments will appear here."/>}
+                </Panel>
+                <Panel title="Asset attention" icon={<Car size={16}/>} action="Find assets" onAction={()=>go('search')}>
+                  {objects.filter(x=>x.type==='asset').slice(0,3).map(item=><ObjectRow key={item.id} item={item} onClick={()=>push({detailId:item.id})} meta={item.assetType ?? 'Asset'}/>)}
+                </Panel>
+              </div>
+              <Panel title="Recent wins" icon={<CheckCircle2 size={16}/>} action="Timeline" onAction={()=>go('timeline')}>
+                {events.filter(x=>x.title.startsWith('Closed loop:')).slice(0,3).map(item=><ObjectRow key={item.id} item={item} onClick={()=>push({detailId:item.id})} meta={fmt(item.occurredAt)}/>)}
+                {!events.some(x=>x.title.startsWith('Closed loop:'))&&<Empty text="Completed commitments become part of your timeline. Your history stays intact."/>}
+              </Panel>
+              <div className="rounded-2xl border border-white/[.07] bg-white/[.02] p-4"><p className="text-xs text-slate-400">Your operating picture updates as you capture events and close loops. No separate modules to maintain.</p></div>
+            </section>}
+
+            {current === 'loops' && <section>
+              <div className="mb-4 flex items-end justify-between gap-3"><div><p className="text-sm text-slate-400">Unresolved commitments</p><p className="mt-1 text-3xl font-black tabular-nums">{loops.length}<span className="ml-2 text-sm font-medium text-slate-500">open</span></p></div><button onClick={openCapture} className="flex items-center gap-2 rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950"><Plus size={16}/> Add loop</button></div>
+              <div className="mb-4 flex gap-2 overflow-x-auto pb-1">{(['all','open','active','waiting','blocked'] as const).map(filter=><button key={filter} onClick={()=>setLoopFilter(filter)} className={`shrink-0 rounded-full border px-4 py-2 text-xs font-semibold capitalize ${loopFilter===filter?'border-blue-400 bg-blue-500/20 text-blue-100':'border-white/10 text-slate-400'}`}>{filter==='all'?'All loops':filter}</button>)}</div>
+              <div className="space-y-3">{loops.filter(item=>loopFilter==='all'||item.status===loopFilter).sort((a,b)=>priorityColor[b.priority??'normal'].localeCompare(priorityColor[a.priority??'normal'])).map(item=><LoopCard key={item.id} item={item} onOpen={()=>push({detailId:item.id})} onComplete={()=>completeLoop(item)} onStatus={(status)=>setLoopStatus(item,status)}/>)}{loops.filter(item=>loopFilter==='all'||item.status===loopFilter).length===0&&<Empty text="Nothing in this view. You're clear."/>}</div>
+            </section>}
+
+            {current === 'timeline' && <section><div className="mb-5"><p className="text-sm text-slate-400">A connected record of what happened.</p><p className="mt-1 text-xs text-slate-500">Events and completed commitments · newest first</p></div><div className="relative ml-3 border-l border-white/10 pl-6">{[...events].sort((a,b)=>Date.parse(b.occurredAt??b.createdAt)-Date.parse(a.occurredAt??a.createdAt)).map(item=><div key={item.id} className="relative mb-4"><span className="absolute -left-[31px] top-4 h-2.5 w-2.5 rounded-full border-2 border-blue-300 bg-[#080d16]"/><button onClick={()=>push({detailId:item.id})} className="w-full rounded-2xl border border-white/[.08] bg-white/[.025] p-4 text-left hover:border-blue-400/30"><p className="text-[11px] font-semibold uppercase tracking-wider text-blue-300">{fmtTime(item.occurredAt??item.createdAt)}</p><p className="mt-1 font-semibold">{item.title}</p><p className="mt-1 text-xs text-slate-500">{(item.streams??[]).join(' · ') || 'Life event'} · {related(item).map(x=>x.title).join(', ') || 'No linked context'}</p></button></div>)}{events.length===0&&<Empty text="Your timeline will grow as meaningful events happen."/>}</div></section>}
+
+            {current === 'search' && <section><div className="relative mb-5"><Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"/><input autoFocus value={searchText} onChange={e=>setSearchText(e.target.value)} placeholder="Search events, loops, people, assets…" className="min-h-14 w-full rounded-2xl border border-white/10 bg-white/[.04] pl-12 pr-4 text-base outline-none focus:border-blue-400/60"/></div>{searchText.trim()?<><p className="mb-3 text-xs text-slate-500">{matches.length} result{matches.length===1?'':'s'} across your LifeOS</p><div className="space-y-2">{matches.map(item=><ObjectRow key={item.id} item={item} onClick={()=>push({detailId:item.id})} meta={kindLabel[item.type]}/>)}</div>{matches.length===0&&<Empty text="No matches. Try another name, event, asset, or phrase."/>}</>:<div className="rounded-2xl border border-white/[.07] p-5"><p className="font-semibold">Search your connected context</p><p className="mt-1 text-sm text-slate-400">Find people, assets, events, and unresolved commitments in one place.</p><div className="mt-4 flex flex-wrap gap-2">{['Vehicle','Family','maintenance','follow up'].map(term=><button key={term} onClick={()=>setSearchText(term)} className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-slate-400">{term}</button>)}</div></div>}</section>}
+
+            {typeof current === 'object' && activeDetail && <section className="space-y-4">
+              <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 to-[#0b1320] p-5 sm:p-7"><div className="mb-4 flex items-center gap-2"><span className="rounded-lg bg-blue-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-200">{kindLabel[activeDetail.type]}</span>{activeDetail.type==='loop'&&<span className="rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase" style={{background:(priorityColor[activeDetail.priority??'normal'])+'20',color:priorityColor[activeDetail.priority??'normal']}}>{activeDetail.priority??'normal'} priority</span>}</div><h2 className="text-2xl font-bold sm:text-3xl">{activeDetail.title}</h2><p className="mt-2 text-sm text-slate-400">Created {fmtTime(activeDetail.createdAt)}</p>
+                {activeDetail.type==='loop'&&<div className="mt-5 flex flex-wrap items-center gap-2"><span className="rounded-full border border-white/10 px-3 py-1.5 text-xs capitalize text-slate-300">{activeDetail.status}</span>{activeDetail.dueAt&&<span className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-slate-300">Due {fmt(activeDetail.dueAt)}</span>}{activeDetail.waitingOn&&<span className="rounded-full border border-amber-400/20 px-3 py-1.5 text-xs text-amber-200">Waiting on {activeDetail.waitingOn}</span>}</div>}
+                {activeDetail.notes&&<p className="mt-5 whitespace-pre-wrap text-sm leading-relaxed text-slate-300">{activeDetail.notes}</p>}
+                {activeDetail.type==='loop'&&activeDetail.status!=='complete'&&<div className="mt-5 flex flex-wrap gap-2"><button onClick={()=>completeLoop(activeDetail)} className="flex items-center gap-2 rounded-xl bg-emerald-400 px-4 py-2.5 text-sm font-bold text-slate-950"><Check size={16}/> Close loop</button><select value={activeDetail.status??'open'} onChange={e=>setLoopStatus(activeDetail,e.target.value as LoopStatus)} className="rounded-xl border border-white/10 bg-slate-900 px-3 text-sm capitalize"><option value="open">Open</option><option value="active">Active</option><option value="waiting">Waiting</option><option value="blocked">Blocked</option></select></div>}
+              </div>
+              {activeDetail.type==='asset'&&<Panel title="Asset overview" icon={<Car size={16}/>}>{activeDetail.value!=null?<p className="text-sm">Value: {activeDetail.value.toLocaleString(undefined,{style:'currency',currency:'USD'})}</p>:<p className="text-sm text-slate-400">No value recorded.</p>}<p className="mt-2 text-xs text-slate-500">{activeDetail.assetType??'Asset'} · {(activeDetail.streams??[]).join(' · ')}</p></Panel>}
+              {activeDetail.type==='person'&&<Panel title="Relationship context" icon={<UserRound size={16}/>}><p className="text-sm text-slate-400">{activeDetail.personType??'Person'} · {activeDetail.notes??'No relationship notes yet.'}</p><p className="mt-2 text-xs text-slate-500">Last updated {fmt(activeDetail.updatedAt)}</p></Panel>}
+              <Panel title="Related context" icon={<Link2 size={16}/>}><div className="space-y-2">{related(activeDetail).map(item=><ObjectRow key={item.id} item={item} onClick={()=>push({detailId:item.id})} meta={kindLabel[item.type]}/>)}</div>{related(activeDetail).length===0&&<Empty text="No connected records yet. Link related people, assets, events, and loops as you capture."/>}</Panel>
+              <Panel title="Streams" icon={<SlidersHorizontal size={16}/>}>{(activeDetail.streams??[]).length?<div className="flex flex-wrap gap-2">{activeDetail.streams!.map(s=><span key={s} className="rounded-full bg-blue-400/10 px-3 py-1 text-xs text-blue-200">{s}</span>)}</div>:<Empty text="No stream tags. Classification can be added without creating another workspace."/>}</Panel>
+            </section>}
+          </main>
+        </div>
       </div>
-    </main>
+
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-[#090f19]/95 px-2 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl md:hidden"><div className="mx-auto grid max-w-lg grid-cols-5 gap-1">
+        {([['home','Home',Home],['loops','Loops',CircleDot],['capture','Capture',Plus],['timeline','Timeline',CalendarDays],['search','Search',Search]] as const).map(([key,label,Icon])=><button key={key} onClick={()=>key==='capture'?openCapture():go(key)} className={`flex flex-col items-center gap-1 rounded-xl py-1.5 text-[10px] font-semibold ${(current===key || (key==='home'&&current==='home'))?'text-amber-300':'text-slate-500'}`}><span className={`grid h-7 w-9 place-items-center rounded-xl ${key==='capture'?'bg-amber-400 text-slate-950':' '}`}><Icon size={key==='capture'?21:18}/></span>{label}</button>)}
+      </div></nav>
+
+      {captureOpen&&<div className="fixed inset-0 z-50 flex items-end justify-center bg-black/65 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={e=>{if(e.target===e.currentTarget)setCaptureOpen(false);}}><section className="w-full max-w-xl rounded-t-3xl border border-white/10 bg-[#101a29] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl sm:p-6"><div className="mb-4 flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-amber-300">Universal Capture</p><h2 className="mt-1 text-xl font-bold">What happened?</h2></div><button onClick={()=>setCaptureOpen(false)} aria-label="Close capture" className="grid h-9 w-9 place-items-center rounded-xl border border-white/10 text-slate-400"><X size={18}/></button></div><form onSubmit={capture}><textarea autoFocus value={captureText} onChange={e=>setCaptureText(e.target.value)} rows={3} maxLength={1000} placeholder="Had annual physical. Need blood work next month." className="w-full resize-none rounded-2xl border border-white/10 bg-black/25 p-4 text-base outline-none placeholder:text-slate-500 focus:border-amber-400/60"/><div className="mt-3 flex flex-wrap gap-2">{(['auto','event','loop','person','asset'] as const).map(k=><button type="button" key={k} onClick={()=>setCaptureKind(k)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold capitalize ${captureKind===k?'border-amber-400/60 bg-amber-400/10 text-amber-200':'border-white/10 text-slate-400'}`}>{k==='auto'?'Auto detect':k==='loop'?'Open loop':k}</button>)}</div><div className="mt-3"><label className="mb-1.5 block text-xs text-slate-500">Connect to existing context (optional)</label><select value={relatedId} onChange={e=>setRelatedId(e.target.value)} className="min-h-11 w-full rounded-xl border border-white/10 bg-slate-900 px-3 text-sm text-slate-300"><option value="">No linked context</option>{objects.filter(x=>x.type==='person'||x.type==='asset').map(x=><option key={x.id} value={x.id}>{x.title} · {kindLabel[x.type]}</option>)}</select></div><div className="mt-4 flex items-center justify-between gap-3"><p className="text-[11px] text-slate-500">Auto creates an event and/or commitment from your words.</p><button type="submit" disabled={!captureText.trim()} className="flex min-h-11 shrink-0 items-center gap-2 rounded-xl bg-amber-400 px-5 text-sm font-bold text-slate-950 disabled:opacity-40"><Plus size={16}/> Capture</button></div></form></section></div>}
+    </div>
   );
+}
+
+function Panel({title,icon,action,onAction,children}:{title:string;icon:React.ReactNode;action?:string;onAction?:()=>void;children:React.ReactNode}){
+  return <section className="rounded-3xl border border-white/[.08] bg-[#0e1724] p-4 sm:p-5"><div className="mb-3 flex items-center justify-between gap-3"><h2 className="flex items-center gap-2 text-sm font-bold">{<span className="text-blue-300">{icon}</span>}{title}</h2>{action&&<button onClick={onAction} className="text-xs font-semibold text-blue-300">{action}</button>}</div>{children}</section>;
+}
+function ObjectRow({item,onClick,meta}:{item:LifeObject;onClick:()=>void;meta:string}){
+  const Icon=item.type==='event'?CalendarDays:item.type==='loop'?CircleDot:item.type==='person'?UserRound:Car;
+  return <button onClick={onClick} className="flex w-full items-center gap-3 rounded-xl border border-white/[.06] bg-black/15 p-3 text-left transition hover:border-white/15"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/[.05] text-slate-300"><Icon size={16}/></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{item.title}</span><span className="mt-0.5 block truncate text-[11px] text-slate-500">{meta}</span></span><ChevronRight size={15} className="shrink-0 text-slate-600"/></button>;
+}
+function Empty({text}:{text:string}){return <div className="rounded-xl border border-dashed border-white/10 px-4 py-5 text-center text-xs leading-relaxed text-slate-500">{text}</div>;}
+function LoopCard({item,onOpen,onComplete,onStatus}:{item:LifeObject;onOpen:()=>void;onComplete:()=>void;onStatus:(status:LoopStatus)=>void}){
+  const priority=item.priority??'normal';
+  return <article className="rounded-2xl border border-white/[.08] bg-[#0e1724] p-4"><div className="flex items-start gap-3"><button onClick={onComplete} aria-label={`Complete ${item.title}`} className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full border border-slate-600 text-transparent hover:border-emerald-400 hover:text-emerald-400"><Check size={14}/></button><button onClick={onOpen} className="min-w-0 flex-1 text-left"><p className="font-semibold">{item.title}</p><div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-slate-500"><span className="rounded-md px-2 py-1 capitalize" style={{background:priorityColor[priority]+'18',color:priorityColor[priority]}}>{priority}</span><span className="capitalize">{item.status}</span><span>Due {fmt(item.dueAt)}</span></div></button><button onClick={onOpen} aria-label="Open loop details" className="text-slate-600"><ChevronRight size={18}/></button></div><div className="mt-3 flex justify-end"><select aria-label="Change loop status" value={item.status??'open'} onChange={e=>onStatus(e.target.value as LoopStatus)} className="rounded-lg border border-white/10 bg-slate-900 px-2 py-1 text-[11px] capitalize text-slate-400"><option value="open">Open</option><option value="active">Active</option><option value="waiting">Waiting</option><option value="blocked">Blocked</option></select></div></article>;
 }
