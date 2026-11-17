@@ -116,7 +116,7 @@ export default function App() {
     setObjects((all) => all.map((x) => x.id === item.id ? { ...x, status: 'complete' as const, updatedAt: timestamp } : x).concat(completion));
   }
   function setLoopStatus(item: LifeObject, status: LoopStatus) {
-    setObjects((all) => all.map((x) => x.id === item.id ? { ...x, status, updatedAt: new Date().toISOString() } : x));
+    setObjects((all) => all.map((x) => x.id === item.id ? { ...x, status: status as LoopStatus, updatedAt: new Date().toISOString() } : x));
   }
   function updateLoop(item: LifeObject, patch: Partial<LifeObject>) {
     setObjects((all) => all.map((x) => x.id === item.id ? { ...x, ...patch, updatedAt: new Date().toISOString() } : x));
