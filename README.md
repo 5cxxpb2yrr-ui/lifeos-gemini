@@ -5,12 +5,11 @@ LifeOS is an event-driven personal operating system. Mission Control is a projec
 ## Architecture
 
 - **Web:** React + TypeScript + Vite + Tailwind + Zustand
-- **Identity:** Neon Managed Better Auth (email/password)
 - **Event API:** Node.js HTTP service with an append-only SurrealDB event history and rebuildable projections
-- **Workspace:** browser-local and scoped to the signed-in Neon user; cloud sync is not connected yet
+- **Workspace:** local to this browser; no account or cloud dependency
 - **Tooling:** pnpm + Turborepo
 
-The canonical record types are Event, Open Loop, Person, and Asset. Areas describe the parts of life those records belong to (for example Health, Home, Work, and Relationships). Sign in with Neon Auth; each account gets a separate browser-local workspace. Export a backup and use Restore to recover it before clearing browser data. The current UI is **not yet synced to the event API or across devices**. Account-scoped browser storage is not encrypted; signing in does not make local data safe from someone with access to this browser profile. Commands in the API append immutable events; deterministic projectors rebuild current state. The UI must not become a second source of truth.
+The canonical record types are Event, Open Loop, Person, and Asset. Areas describe the parts of life those records belong to (for example Health, Home, Work, and Relationships). LifeOS opens directly into a browser-local workspace; no account or onboarding is required. Export a backup and use Restore to recover it before clearing browser data. The current UI is **not yet synced to the event API or across devices**. Browser storage is not encrypted and remains accessible to anyone with access to this browser profile. Commands in the API append immutable events; deterministic projectors rebuild current state. The UI must not become a second source of truth.
 
 ## Product ethos
 
@@ -26,7 +25,7 @@ LifeOS should be simpler, more natural, and easier to navigate. Use familiar lan
 docker compose up --build
 ```
 
-The API listens on `http://localhost:8787`. Its schema is initialized automatically. The browser app is not connected to this API yet; the current usable preview is a local-first browser workspace. Configure `VITE_NEON_AUTH_URL` for local development (the provisioned LifeOS Auth URL is in `.env.example`). The value is public configuration, not a secret.
+The API listens on `http://localhost:8787`. Its schema is initialized automatically. The browser app is not connected to this API yet; the current usable preview is a local-first browser workspace. No authentication configuration is required for the local-first preview.
 
 - `GET /health`
 - `GET /v1/state` (Bearer token required)
