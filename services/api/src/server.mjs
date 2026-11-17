@@ -30,10 +30,12 @@ async function readJson(request) {
 function validateObject(input) {
   if (!input || !allowedTypes.has(input.type)) throw Object.assign(new Error('type must be event, loop, person, or asset'), { status: 400 });
   if (typeof input.title !== 'string' || !input.title.trim()) throw Object.assign(new Error('title is required'), { status: 400 });
+  const id = input.id ?? `obj_${randomUUID().replaceAll('-', '')}`;
+  if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(id)) throw Object.assign(new Error('id contains unsupported characters'), { status: 400 });
   const now = new Date().toISOString();
   const object = {
     ...input,
-    id: input.id ?? `obj_${randomUUID().replaceAll('-', '')}`,
+    id,
     title: input.title.trim(),
     createdAt: input.createdAt ?? now,
     updatedAt: now,
@@ -77,6 +79,7 @@ async function route(request, response) {
 
   if (request.method === 'PATCH' && url.pathname.startsWith('/v1/objects/')) {
     const objectId = decodeURIComponent(url.pathname.slice('/v1/objects/'.length));
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(objectId)) return send(response, 400, { error: 'Invalid object id' });
     const patch = await readJson(request);
     const forbidden = ['id', 'type', 'createdAt', 'relatedIds'];
     if (forbidden.some((key) => key in patch)) return send(response, 400, { error: 'Identity and relationship fields cannot be changed through object update.' });
@@ -115,7 +118,9 @@ async function route(request, response) {
   if (request.method === 'POST' && relationMatch) {
     const sourceId = decodeURIComponent(relationMatch[1]);
     const { targetId } = await readJson(request);
-    if (!targetId || sourceId === targetId) return send(response, 400, { error: 'A different targetId is required' });
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(sourceId) || !/^[A-Za-z0-9_-]{1,80}$/.test(targetId ?? '') || sourceId === targetId) {
+      return send(response, 400, { error: 'A valid, different targetId is required' });
+    }
     const objects = projectLifeState(await store.readEvents()).objects;
     if (!objects.some((item) => item.id === sourceId) || !objects.some((item) => item.id === targetId)) {
       return send(response, 404, { error: 'Both related objects must exist' });
@@ -143,6 +148,23 @@ const server = createServer(async (request, response) => {
   }
 });
 
-server.listen(port, '0.0.0.0', () => {
-  console.log(`LifeOS API listening on :${port}`);
+async function bootstrap() {
+  let lastError;
+  for (let attempt = 1; attempt <= 30; attempt += 1) {
+    try {
+      await store.ensureSchema();
+      server.listen(port, '0.0.0.0', () => console.log(`LifeOS API listening on :${port}`));
+      return;
+    } catch (error) {
+      lastError = error;
+      console.log(`Waiting for SurrealDB (${attempt}/30): ${error.message}`);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+  throw lastError;
+}
+
+bootstrap().catch((error) => {
+  console.error('LifeOS API could not initialize its database schema:', error);
+  process.exitCode = 1;
 });
