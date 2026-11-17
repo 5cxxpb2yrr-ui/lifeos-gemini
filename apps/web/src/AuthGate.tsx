@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { Activity, ArrowRight, LoaderCircle, LockKeyhole } from 'lucide-react';
+import { Activity, ArrowRight, Loader2, LockKeyhole } from 'lucide-react';
 import { authClient } from './auth';
 
 type AuthUser = { id: string; email: string; name?: string | null };
@@ -8,7 +8,7 @@ export default function AuthGate({ children }: { children: (user: AuthUser) => R
   const { data: session, isPending, error } = authClient.useSession();
 
   if (isPending) {
-    return <div className="grid min-h-screen place-items-center bg-[#080d16] text-slate-300"><div className="flex items-center gap-3 text-sm"><LoaderCircle className="animate-spin" size={18}/> Restoring your LifeOS session…</div></div>;
+    return <div className="grid min-h-screen place-items-center bg-[#080d16] text-slate-300"><div className="flex items-center gap-3 text-sm"><Loader2 className="animate-spin" size={18}/> Restoring your LifeOS session…</div></div>;
   }
 
   if (!session?.user) return <AuthScreen sessionError={error?.message} />;
@@ -60,7 +60,7 @@ function AuthScreen({ sessionError }: { sessionError?: string }) {
           <label className="block text-xs font-medium text-slate-400">Password<input type="password" autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} minLength={8} required value={password} onChange={event=>setPassword(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-white/10 bg-black/25 px-4 text-sm text-white outline-none focus:border-blue-400/60" placeholder="At least 8 characters"/></label>
           {error && <p role="alert" className="rounded-xl border border-rose-400/20 bg-rose-400/10 p-3 text-sm text-rose-200">{error}</p>}
           {notice && <p role="status" className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm text-emerald-200">{notice}</p>}
-          <button disabled={pending} type="submit" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 text-sm font-bold text-slate-950 disabled:cursor-wait disabled:opacity-60">{pending ? <LoaderCircle size={17} className="animate-spin"/> : <LockKeyhole size={16}/>} {mode === 'signin' ? 'Sign in securely' : 'Create account'} {!pending&&<ArrowRight size={16}/>}</button>
+          <button disabled={pending} type="submit" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 text-sm font-bold text-slate-950 disabled:cursor-wait disabled:opacity-60">{pending ? <Loader2 size={17} className="animate-spin"/> : <LockKeyhole size={16}/>} {mode === 'signin' ? 'Sign in securely' : 'Create account'} {!pending&&<ArrowRight size={16}/>}</button>
         </form>
         <div className="mt-6 border-t border-white/[.07] pt-5 text-center text-sm text-slate-400">
           {mode === 'signin' ? "New to LifeOS?" : 'Already have an account?'}{' '}
