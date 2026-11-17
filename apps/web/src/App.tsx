@@ -20,6 +20,7 @@ const seed: LifeObject[] = [
   { id: 'person-contractor', type: 'person', title: 'Contractor', personType: 'Service provider', createdAt: ago(40), updatedAt: ago(8), notes: 'Waiting on a quote for the home repair.', streams: ['Home'], relatedIds: ['loop-quote'] },
   { id: 'event-oil', type: 'event', title: 'Changed engine oil and filter', occurredAt: ago(14), createdAt: ago(14), updatedAt: ago(14), notes: 'Service record · next interval 5,000 miles.', streams: ['Vehicles'], relatedIds: ['asset-subaru'] },
   { id: 'event-dinner', type: 'event', title: 'Dinner with family', occurredAt: ago(2), createdAt: ago(2), updatedAt: ago(2), streams: ['Family'], relatedIds: ['person-family'] },
+  { id: 'event-service-window', type: 'event', title: 'Next oil service window opens', occurredAt: future(4), createdAt: ago(1), updatedAt: ago(1), notes: 'Planning marker · verify mileage before scheduling.', streams: ['Vehicles'], relatedIds: ['asset-subaru'] },
   { id: 'loop-quote', type: 'loop', title: 'Follow up on contractor quote', status: 'waiting', priority: 'high', waitingOn: 'Contractor', createdAt: ago(8), updatedAt: ago(1), dueAt: future(1), streams: ['Home'], relatedIds: ['person-contractor', 'asset-home'] },
   { id: 'loop-registration', type: 'loop', title: 'Renew vehicle registration', status: 'open', priority: 'urgent', risk: true, createdAt: ago(12), updatedAt: ago(1), dueAt: future(2), streams: ['Vehicles'], relatedIds: ['asset-subaru'] },
   { id: 'loop-bloodwork', type: 'loop', title: 'Schedule follow-up blood work', status: 'active', priority: 'normal', createdAt: ago(3), updatedAt: ago(1), dueAt: future(5), streams: ['Health'], relatedIds: [] },
@@ -61,6 +62,7 @@ export default function App() {
   const waiting = loops.filter((item) => item.status === 'waiting' || item.waitingOn);
   const attention = [...loops].sort((a,b) => (load.drivers.find(x=>x.id===b.id)?.points ?? 0) - (load.drivers.find(x=>x.id===a.id)?.points ?? 0)).slice(0,3);
   const dueSoon = loops.filter((item) => item.dueAt && Date.parse(item.dueAt) <= Date.now() + 7*86400000).sort((a,b)=>Date.parse(a.dueAt!) - Date.parse(b.dueAt!));
+  const upcomingEvents = objects.filter((item) => item.type === 'event' && item.occurredAt && Date.parse(item.occurredAt) >= Date.now()).sort((a,b)=>Date.parse(a.occurredAt!) - Date.parse(b.occurredAt!));
   const matches = objects.filter((item) => {
     const q = searchText.trim().toLocaleLowerCase();
     return q && [item.title, item.notes ?? '', item.assetType ?? '', item.personType ?? '', ...(item.streams ?? [])].join(' ').toLocaleLowerCase().includes(q);
