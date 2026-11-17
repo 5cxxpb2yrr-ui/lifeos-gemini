@@ -35,6 +35,14 @@ test('loop completion creates a historical event and preserves the loop', () => 
   assert.deepEqual(state.objects.find((x) => x.id === 'l1').relatedIds, ['e1']);
 });
 
+test('recorded sequence preserves command order when event timestamps match', () => {
+  const state = projectLifeState([
+    { eventId: 'later-random-id', eventType: 'object.updated', sequence: 200, occurredAt: at(1), payload: { objectId: 'ordered', patch: { title: 'Second' } } },
+    { eventId: 'earlier-random-id', eventType: 'object.created', sequence: 100, occurredAt: at(1), payload: { object: { id: 'ordered', type: 'loop', title: 'First', status: 'open', relatedIds: [] } } },
+  ]);
+  assert.equal(state.objects[0].title, 'Second');
+});
+
 test('unknown events stay harmless and remain counted', () => {
   const state = projectLifeState([{ eventId: '1', eventType: 'future.signal', occurredAt: at(1), payload: {} }]);
   assert.equal(state.objects.length, 0);
