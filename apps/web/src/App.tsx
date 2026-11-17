@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import {
   Activity, ArrowLeft, ArrowRight, Bell, CalendarDays, Check, ChevronRight,
   CircleDot, Clock3, Home, Plus, Search, Sparkles, UserRound, Car, X,
@@ -85,7 +85,7 @@ export default function App() {
     anchor.click();
     URL.revokeObjectURL(url);
   }
-  async function importWorkspace(event: React.ChangeEvent<HTMLInputElement>) {
+  async function importWorkspace(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
