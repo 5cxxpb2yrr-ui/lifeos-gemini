@@ -40,6 +40,7 @@ function validateObject(input) {
     createdAt: input.createdAt ?? now,
     updatedAt: now,
     relatedIds: Array.isArray(input.relatedIds) ? [...new Set(input.relatedIds)] : [],
+    areas: Array.isArray(input.areas) ? [...new Set(input.areas.filter((area) => typeof area === 'string' && area.trim()).map((area) => area.trim()))] : [],
   };
   if (object.type === 'loop') {
     object.status ??= 'open';
@@ -87,8 +88,8 @@ async function route(request, response) {
     const current = state.objects.find((item) => item.id === objectId);
     if (!current) return send(response, 404, { error: 'Object not found' });
     const allowed = current.type === 'loop'
-      ? ['title', 'notes', 'status', 'priority', 'dueAt', 'waitingOn', 'risk', 'streams']
-      : ['title', 'notes', 'value', 'streams', 'personType', 'assetType', 'occurredAt'];
+      ? ['title', 'notes', 'status', 'priority', 'dueAt', 'waitingOn', 'risk', 'areas']
+      : ['title', 'notes', 'value', 'areas', 'personType', 'assetType', 'occurredAt'];
     const cleanPatch = Object.fromEntries(Object.entries(patch).filter(([key]) => allowed.includes(key)));
     if (!Object.keys(cleanPatch).length) return send(response, 400, { error: 'No supported fields to update' });
     if (cleanPatch.status && !allowedLoopStatuses.has(cleanPatch.status)) return send(response, 400, { error: 'Invalid loop status' });
