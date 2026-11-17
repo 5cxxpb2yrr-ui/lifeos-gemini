@@ -5,10 +5,13 @@
  * projection can be rebuilt from the same immutable history.
  */
 export function projectLifeState(events = []) {
-  const ordered = [...events].sort((a, b) =>
-    String(a.occurredAt).localeCompare(String(b.occurredAt)) ||
-    String(a.eventId).localeCompare(String(b.eventId))
-  );
+  const ordered = [...events].sort((a, b) => {
+    const aSequence = Number(a.sequence);
+    const bSequence = Number(b.sequence);
+    if (Number.isFinite(aSequence) && Number.isFinite(bSequence) && aSequence !== bSequence) return aSequence - bSequence;
+    return String(a.recordedAt ?? a.occurredAt).localeCompare(String(b.recordedAt ?? b.occurredAt)) ||
+      String(a.eventId).localeCompare(String(b.eventId));
+  });
   const objects = new Map();
 
   for (const event of ordered) {
