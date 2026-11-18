@@ -119,12 +119,15 @@ function Workspace() {
     try {
       const parsed = JSON.parse(await file.text());
       const imported = Array.isArray(parsed) ? parsed : parsed.objects;
-      if (!Array.isArray(imported) || imported.some((item) => !item || typeof item.id !== 'string' || typeof item.title !== 'string' || !['event','loop','person','asset'].includes(item.type))) throw new Error('This is not a valid LifeOS backup.');
-      if (!Array.isArray(parsed) && parsed.schemaVersion != null && parsed.schemaVersion > 1) throw new Error('This backup was created by a newer LifeOS version. Update LifeOS before restoring it.');
+      if (!Array.isArray(imported) || imported.some((item) => !item || typeof item.id !== 'string' || !item.id.trim() || typeof item.title !== 'string' || !item.title.trim() || !['event','loop','person','asset'].includes(item.type))) throw new Error('This is not a valid LifeOS backup.');
+      if (!Array.isArray(parsed) && parsed.schemaVersion != null && (!Number.isInteger(parsed.schemaVersion) || parsed.schemaVersion > 1)) throw new Error('This backup uses an unsupported LifeOS data version.');
+      const importedIds = imported.map((item) => item.id);
+      if (new Set(importedIds).size !== importedIds.length) throw new Error('This backup contains duplicate record IDs. The original workspace has not been changed.');
+      if (imported.some((item) => (item.areas != null && !Array.isArray(item.areas)) || (item.streams != null && !Array.isArray(item.streams)) || (item.relatedIds != null && (!Array.isArray(item.relatedIds) || item.relatedIds.some((relatedId) => typeof relatedId !== 'string'))))) throw new Error('This backup contains invalid area or relationship data. The original workspace has not been changed.');
       if (!window.confirm('Replace the records in this browser with the records from this backup?')) return;
       workspaceReadError = null;
       setStorageStatus('saved');
-      setObjects(imported.map((item) => ({ ...item, areas: item.areas ?? item.streams ?? [], relatedIds: Array.isArray(item.relatedIds) ? item.relatedIds : [] })));
+      setObjects(imported.map((item) => ({ ...item, areas: item.areas ?? item.streams ?? [], relatedIds: item.relatedIds ?? [] })));
       setScreenStack(['home']);
       setCaptureOpen(false);
     } catch (error) {
